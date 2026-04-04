@@ -121,44 +121,50 @@ async function handleScan(body: any): Promise<Response> {
 
     const materialContext = material ? `The user confirmed: object is made from ${material}.` : '';
 
-    const scanPrompt = `You are looking at an image. DESCRIBE ONLY WHAT YOU SEE. Do not guess what it is.
+    const scanPrompt = `DESCRIBE EXACTLY WHAT YOU SEE. DO NOT GUESS WHAT IT IS.
 
-Look at the object and write detailed observations:
+Look at this image carefully and answer these questions:
 
-**Shape:** Describe the exact shape - is it round, square, triangular, irregular, flat, curved, elongated, etc? Any flat sides?
+1. SHAPE: What shape is it? (rectangular, square, round, irregular, flat, curved, elongated?)
+   - Are edges straight, curved, or broken?
+   - Is it thick or thin?
 
-**Size:** Is it smaller than a coin? Coin-sized? Larger? Fill the frame?
+2. SIZE: Compare to: smaller than coin | coin-sized | larger than coin | fills frame
 
-**Colors:** List every color you see - main colors and any accents, marks, or variations.
+3. COLORS: List ALL colors you see (main color, any marks, dirt, patterns)
 
-**Texture:** Describe the surface - is it smooth, rough, bumpy, wrinkled, cracked, corroded, shiny, dull, dirty, clean?
+4. SURFACE: What does the surface look like?
+   - smooth, rough, bumpy, cracked, wrinkled, dusty, muddy, clean?
+   - Is it shiny, dull, or matte?
 
-**Marks:** Any holes, lines, letters, numbers, scratches, decorations, patterns, stamps, or wear marks? Describe them exactly.
+5. MARKS: Any of these?
+   - scratches, cracks, holes, lines, dots
+   - symbols, letters, drawings, patterns
+   - wear spots, rust, corrosion, patina
 
-**Material appearance:** What does the surface look like it's made of?
-- Shiny/metallic = metal
-- Dull/hard = ceramic or stone
-- Transparent/shiny = glass
-- Rough/grainy = wood or bone
-- Soft/flexible = fabric or leather
+6. MATERIAL LOOK: Based on appearance:
+   - Hard and shiny = probably metal
+   - Hard and dull = probably ceramic/stone/glass
+   - Soft or grainy = probably wood/bone/cloth
 
-Write each section with detailed observations. Be specific.`;
+Answer each question. Be specific. Example: "Color: brown with dark brown marks on surface. Surface: rough, dusty, some cracks along edges."`;
 
-    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 250);
+    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 400);
     
     return new Response(JSON.stringify({
       identification: {
-        name: 'Object',
+        name: 'Object being analyzed',
         period: 'Unknown',
         origin: 'Unknown',
-        material: extractField(scanResult, 'Material appearance') || material,
+        material: extractField(scanResult, 'MATERIAL LOOK') || material,
         confidence: 30,
         observations: {
-          shape: extractField(scanResult, 'Shape') || '',
-          colors: extractField(scanResult, 'Colors') || '',
-          surface: extractField(scanResult, 'Texture') || '',
-          features: extractField(scanResult, 'Marks') || '',
-          material: extractField(scanResult, 'Material appearance') || '',
+          shape: extractField(scanResult, 'SHAPE') || '',
+          size: extractField(scanResult, 'SIZE') || '',
+          colors: extractField(scanResult, 'COLORS') || '',
+          surface: extractField(scanResult, 'SURFACE') || '',
+          features: extractField(scanResult, 'MARKS') || '',
+          material: extractField(scanResult, 'MATERIAL LOOK') || '',
           raw: scanResult
         }
       }
@@ -196,40 +202,36 @@ async function handleResearch(body: any): Promise<Response> {
     const obs = identification?.observations || {};
     const material = obs.material || identification?.material || '';
     
-    const researchPrompt = `You analyzed this image and observed:
+    // Generate description from observations directly (no need to call AI again)
+    const shape = obs.shape || 'Unknown shape';
+    const size = obs.size || 'Unknown size';
+    const colors = obs.colors || 'Unknown color';
+    const surface = obs.surface || 'Unknown surface';
+    const features = obs.features || 'No visible marks';
 
-SHAPE: ${obs.shape || 'not described'}
-COLORS: ${obs.colors || 'not described'}
-TEXTURE: ${obs.surface || 'not described'}
-MARKS/FEATURES: ${obs.features || 'none visible'}
-MATERIAL LOOKS LIKE: ${obs.material || material || 'not determined'}
-
-Now write a brief summary:
-**Type:** Give ONE name for this object (bead, coin, pottery shard, button, bullet, tool, toy, jewelry, etc). If completely unsure, write "Unknown object".
-**Description:** One sentence describing what you see. Example: "A small round orange-red glass bead about 1cm, smooth surface, with a hole through the center."
-**Storage:** One sentence on safe storage.`;
-
-
-
-    const researchResult = await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 250);
+    // Create a simple, factual description
+    const description = `${colors}. ${surface} surface. ${features}. ${size}.`;
+    const objType = 'Object';
     
-    const description = extractField(researchResult, 'Description') || obs.shape + ' ' + obs.material || 'Could not generate description.';
-    const objType = extractField(researchResult, 'Type') || obs.shape + ' ' + obs.material || 'Unknown object';
-    const storageAdvice = extractField(researchResult, 'Storage') || 'Store in a dry, cool place.';
-    
+    const storageAdvice = surface.toLowerCase().includes('dusty') || surface.toLowerCase().includes('dirty')
+      ? 'Gently brush off loose dirt. Store in a dry box away from moisture.'
+      : surface.toLowerCase().includes('metal') || surface.toLowerCase().includes('shiny')
+      ? 'Store in a dry place. Avoid moisture to prevent rust.'
+      : 'Store in a cool, dry environment.';
+
     return new Response(JSON.stringify({
       identification: {
         name: objType,
         period: 'Unknown',
         origin: 'Unknown',
-        material: obs.material || material,
+        material: material,
         description: {
-          en: obs.colors + ' ' + obs.material + ' ' + obs.shape + '. ' + description + ' Features: ' + obs.features
+          en: description
         },
         historical_context: {
           en: ''
         },
-        confidence: 50,
+        confidence: 40,
         rarity: 'unknown',
         similar_finds: '',
         reference_links: []
@@ -237,8 +239,8 @@ Now write a brief summary:
       storage_instructions: {
         en: storageAdvice
       },
-      is_coin: objType.toLowerCase().includes('coin'),
-      is_pipe: objType.toLowerCase().includes('pipe'),
+      is_coin: false,
+      is_pipe: false,
       is_archaeological: true
     }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }

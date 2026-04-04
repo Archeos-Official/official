@@ -1,5 +1,7 @@
 // @ts-ignore
 const AI_WORKER_URL = import.meta.env.VITE_AI_WORKER_URL;
+// @ts-ignore
+const RESEARCH_WORKER_URL = import.meta.env.VITE_RESEARCH_WORKER_URL;
 
 const languagePrompts = {
     en: 'Respond in English.',
@@ -50,15 +52,18 @@ export const deepResearchArtifact = async (scanResult, language = 'en', imageUrl
     try {
         console.log('Deep researching artifact...', scanResult);
         
-        const response = await fetch(AI_WORKER_URL, {
+        const identification = scanResult.identification || {};
+        const observations = identification.observations || {};
+        const description = identification.description?.en || '';
+        
+        const response = await fetch(RESEARCH_WORKER_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                action: 'research',
-                identification: scanResult.identification,
-                image_urls: imageUrls
+                description: description,
+                observations: observations
             })
         });
 
@@ -75,8 +80,26 @@ export const deepResearchArtifact = async (scanResult, language = 'en', imageUrl
             throw new Error(result.error);
         }
 
-        // Return research results in English only (no auto-translation to save tokens)
-        return result;
+        // Merge research results with scan results
+        return {
+            identification: {
+                ...identification,
+                name: result.name || identification.name,
+                period: result.period || 'Unknown',
+                origin: result.origin || 'Unknown',
+                historical_context: { en: result.historical_context || '' },
+                confidence: result.confidence || identification.confidence || 50,
+                rarity: result.rarity || 'unknown',
+                similar_finds: result.similar_finds || '',
+                reference_links: result.reference_links || []
+            },
+            storage_instructions: {
+                en: result.storage_instructions || identification.storage_instructions?.en || 'Store in a dry, cool place.'
+            },
+            is_coin: (result.name || '').toLowerCase().includes('coin'),
+            is_pipe: (result.name || '').toLowerCase().includes('pipe'),
+            is_archaeological: true
+        };
     } catch (error) {
         console.error('Deep research failed:', error);
         // Return original result if research fails
