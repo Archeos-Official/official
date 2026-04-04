@@ -1,0 +1,14 @@
+export default function VaseLogo({ className = "w-6 h-6", color = "white" }) {
+  return (
+    <svg viewBox="0 0 100 118" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+      <path
+        d="M22,2 L78,2 L76,8 L64,11 Q60,15 58,20 C72,26 85,45 85,65 C85,85 74,98 68,102 L74,102 L74,108 L72,108 L72,114 L28,114 L28,108 L26,108 L26,102 L32,102 C26,98 15,85 15,65 C15,45 28,26 42,20 Q40,15 36,11 L24,8 Z"
+        stroke={color}
+        strokeWidth="4"
+        fill="none"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
