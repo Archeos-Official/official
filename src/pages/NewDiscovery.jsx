@@ -135,11 +135,13 @@ export default function NewDiscovery() {
             }
             setUploads(uploadedUrls);
 
-            setAnalyzeStatus('scanning');
+            setAnalyzeStatus('scan');
             const scanResult = await analyzeArtifact(uploadedUrls, form, language);
             
-            setAnalyzeStatus('researching');
+            setAnalyzeStatus('research');
             const researchResult = await deepResearchArtifact(scanResult, language, uploadedUrls);
+            
+            setAnalyzeStatus('complete');
             
             console.log('Research result:', researchResult);
 

@@ -121,53 +121,67 @@ async function handleScan(body: any): Promise<Response> {
 
     const materialContext = material ? `The user confirmed: object is made from ${material}.` : '';
 
-    const scanPrompt = `DESCRIBE EXACTLY WHAT YOU SEE. DO NOT GUESS WHAT IT IS.
+    const scanPrompt = `You are an archaeologist analyzing a discovery image. Identify the object.
 
-Look at this image carefully and answer these questions:
+Look at the image and provide a brief identification.
 
-1. SHAPE: What shape is it? (rectangular, square, round, irregular, flat, curved, elongated?)
-   - Are edges straight, curved, or broken?
-   - Is it thick or thin?
+**Name:** [one line - what is this? e.g., "Bronze coin", "Clay pot fragment", "Iron nail"]
+**Period:** [time period - e.g., "Roman era", "19th century", "Medieval"]
+**Origin:** [region - e.g., "Northern Europe", "Mediterranean"]
+**Material:** [what it's made of - e.g., "bronze", "ceramic", "iron"]
+**Confidence:** [0-100]
+**Visual:** [2 sentence description of what you see]
+**Storage:** [very brief]
 
-2. SIZE: Compare to: smaller than coin | coin-sized | larger than coin | fills frame
+${materialContext}`;
 
-3. COLORS: List ALL colors you see (main color, any marks, dirt, patterns)
-
-4. SURFACE: What does the surface look like?
-   - smooth, rough, bumpy, cracked, wrinkled, dusty, muddy, clean?
-   - Is it shiny, dull, or matte?
-
-5. MARKS: Any of these?
-   - scratches, cracks, holes, lines, dots
-   - symbols, letters, drawings, patterns
-   - wear spots, rust, corrosion, patina
-
-6. MATERIAL LOOK: Based on appearance:
-   - Hard and shiny = probably metal
-   - Hard and dull = probably ceramic/stone/glass
-   - Soft or grainy = probably wood/bone/cloth
-
-Answer each question. Be specific. Example: "Color: brown with dark brown marks on surface. Surface: rough, dusty, some cracks along edges."`;
-
-    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 400);
+    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 600);
+    
+    // Robust extraction - find text between **Name:** and next **
+    const extractField = (text: string, field: string): string => {
+      const regex = new RegExp(`\\*\\*${field}:\\*\\*\\s*([^\\n]+)`, 'i');
+      const match = text.match(regex);
+      return match ? match[1].trim() : '';
+    };
+    
+    let name = extractField(scanResult, 'Name') || extractField(scanResult, 'name') || '';
+    let period = extractField(scanResult, 'Period') || extractField(scanResult, 'period') || 'Unknown period';
+    let origin = extractField(scanResult, 'Origin') || extractField(scanResult, 'origin') || 'Unknown origin';
+    let extractedMaterial = extractField(scanResult, 'Material') || extractField(scanResult, 'material') || material;
+    let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
+    let storage = extractField(scanResult, 'Storage') || extractField(scanResult, 'storage') || 'Store in a dry, cool place.';
+    let visual = extractField(scanResult, 'Visual') || extractField(scanResult, 'visual') || '';
+    
+    // Fallback: if name is empty, try to find any line with "Name:" or just use the whole response
+    if (!name) {
+      const nameLine = scanResult.split('\n').find(l => l.toLowerCase().includes('name:'));
+      if (nameLine) name = nameLine.replace(/.*name:/i, '').trim();
+    }
+    if (!name) name = 'Unknown object';
+    
+    const confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
+    
+    const isCoin = name.toLowerCase().includes('coin');
+    const isPipe = name.toLowerCase().includes('pipe');
+    const isArch = !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('modern') && confidence > 20;
     
     return new Response(JSON.stringify({
       identification: {
-        name: 'Object being analyzed',
-        period: 'Unknown',
-        origin: 'Unknown',
-        material: extractField(scanResult, 'MATERIAL LOOK') || material,
-        confidence: 30,
-        observations: {
-          shape: extractField(scanResult, 'SHAPE') || '',
-          size: extractField(scanResult, 'SIZE') || '',
-          colors: extractField(scanResult, 'COLORS') || '',
-          surface: extractField(scanResult, 'SURFACE') || '',
-          features: extractField(scanResult, 'MARKS') || '',
-          material: extractField(scanResult, 'MATERIAL LOOK') || '',
-          raw: scanResult
-        }
-      }
+        name: name,
+        period: period,
+        origin: origin,
+        material: extractedMaterial || material,
+        description: { en: visual },
+        historical_context: { en: '' },
+        confidence: confidence,
+        rarity: 'unknown',
+        similar_finds: '',
+        reference_links: []
+      },
+      storage_instructions: { en: storage },
+      is_coin: isCoin,
+      is_pipe: isPipe,
+      is_archaeological: isArch
     }), {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });

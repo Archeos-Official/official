@@ -62,50 +62,47 @@ export default {
       const obs = observations || {};
       const desc = description || '';
       
-      const researchPrompt = `You are an archaeologist researching a find.
+      // Clean up description - take only first 300 chars to avoid too much detail
+      const shortDesc = desc.length > 300 ? desc.substring(0, 300) + '...' : desc;
+      
+      const researchPrompt = `You are an archaeologist. Based on this visual description, identify the object.
 
-OBJECT DESCRIPTION:
-${desc || 'Unknown object'}
+VISUAL DESCRIPTION: ${shortDesc || 'Unknown object'}
 
-OBSERVATIONS:
+KEY OBSERVATIONS:
 - Shape: ${obs.shape || 'unknown'}
-- Size: ${obs.size || 'unknown'}
+- Size: ${obs.size || 'unknown'}  
 - Colors: ${obs.colors || 'unknown'}
 - Surface: ${obs.surface || 'unknown'}
 - Features: ${obs.features || 'none'}
-- Material: ${obs.material || 'unknown'}
+- Material guess: ${obs.material || 'unknown'}
 
-Based on this, provide:
+Respond with ONLY this format (short answers):
 
-**Name:** What type of object is this? Be honest if unsure. Use a short descriptive name like "Bronze button" or "Clay pipe fragment" or "Unknown object".
+**Name:** [e.g., "Stone grinding tool" or "Clay pot fragment" - keep it short]
+**Period:** [e.g., "Neolithic" or "Roman era" - or "Unknown"]
+**Origin:** [e.g., "Northern Europe" - or "Unknown"]
+**Material:** [What it's made of - stone, ceramic, metal, bone, etc.]
+**Context:** [1 sentence about historical significance]
+**Storage:** [Very brief storage advice]
 
-**Period:** Best guess at age. If unclear, say "Unknown period". Keep it simple: "17th century" or "Roman era" or "Unknown".
-
-**Origin:** Best guess at origin region. If unclear, say "Unknown origin".
-
-**Historical Context:** 2 sentences about what this type of object tells us about its time period and use. If truly unknown, say "No historical context available."
-
-**Similar Finds:** 2 sentences mentioning similar known objects. If none known, say "No well-documented similar finds available."
-
-**Storage:** 1 sentence on proper storage and handling.
-
-Keep responses factual. Do not invent specific details.`;
+If truly unknown, say "Unknown" - don't invent details.`;
 
       const result = await callAI(researchPrompt, 600);
       
-      // Simple extraction
-      const nameMatch = result.match(/\*\*Name:\*\*[\s\n]*(.+?)(?:\n|$)/i);
-      const periodMatch = result.match(/\*\*Period:\*\*[\s\n]*(.+?)(?:\n|$)/i);
-      const originMatch = result.match(/\*\*Origin:\*\*[\s\n]*(.+?)(?:\n|$)/i);
-      const contextMatch = result.match(/\*\*Historical Context:\*\*[\s\n]*(.+?)(?:\*\*Similar|$)/i);
-      const similarMatch = result.match(/\*\*Similar Finds:\*\*[\s\n]*(.+?)(?:\*\*Storage|$)/i);
-      const storageMatch = result.match(/\*\*Storage:\*\*[\s\n]*(.+?)(?:\n\n|$)/i);
+      // Simple extraction - match **Field:** value
+      const nameMatch = result.match(/\*\*Name:\*\*\s*(.+?)(?:\n|$)/i);
+      const periodMatch = result.match(/\*\*Period:\*\*\s*(.+?)(?:\n|$)/i);
+      const originMatch = result.match(/\*\*Origin:\*\*\s*(.+?)(?:\n|$)/i);
+      const materialMatch = result.match(/\*\*Material:\*\*\s*(.+?)(?:\n|$)/i);
+      const contextMatch = result.match(/\*\*Context:\*\*\s*(.+?)(?:\n|\*\*|$)/i);
+      const storageMatch = result.match(/\*\*Storage:\*\*\s*(.+?)(?:\n|$)/i);
       
-      const name = nameMatch ? nameMatch[1].trim() : desc.substring(0, 50) || 'Unknown object';
+      const name = nameMatch ? nameMatch[1].trim() : desc.substring(0, 30) || 'Unknown object';
       const period = periodMatch ? periodMatch[1].trim() : 'Unknown period';
       const origin = originMatch ? originMatch[1].trim() : 'Unknown origin';
+      const material = materialMatch ? materialMatch[1].trim() : obs.material || 'Unknown';
       const context = contextMatch ? contextMatch[1].trim() : '';
-      const similar = similarMatch ? similarMatch[1].trim() : '';
       const storage = storageMatch ? storageMatch[1].trim() : 'Store in a dry, cool place.';
       
       // Calculate confidence based on how much we found
@@ -119,8 +116,9 @@ Keep responses factual. Do not invent specific details.`;
         name: name,
         period: period,
         origin: origin,
+        material: material,
         historical_context: context,
-        similar_finds: similar,
+        similar_finds: '',
         storage_instructions: storage,
         confidence: Math.min(confidence, 85),
         rarity: 'unknown',
