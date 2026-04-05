@@ -122,6 +122,12 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                     </div>
                 </div>
 
+                {currentContext && (
+                    <div className={`p-3 rounded-lg ${subBg}`}>
+                        <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
+                    </div>
+                )}
+
                 {currentDescription && (
                     <p className={textMain}>{currentDescription}</p>
                 )}
@@ -149,12 +155,6 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                         </div>
                     </div>
                 </div>
-
-                {currentContext && (
-                    <div className={`p-3 rounded-lg ${subBg}`}>
-                        <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
-                    </div>
-                )}
 
                 {analysis.similar_finds && (
                     <div className={`p-4 rounded-xl border ${subBg}`}>
