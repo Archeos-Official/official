@@ -133,10 +133,11 @@ Identify the object AND research its history in ONE response:
 5. Description: [detailed description - 4-6 sentences]
 6. Historical Context: [2-3 sentences about significance]
 7. Similar Finds: [1-2 sentences about similar artifacts]
-8. Storage: [ONE simple sentence for home storage]
-9. Confidence: [70-95 - based on how clearly identifiable the object is]
+8. Storage: [simple sentence for home storage]
+9. Confidence: [70-95 based on clarity]
+10. Rarity: [common, uncommon, rare, or very_rare based on how common this type is]
 
-Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
+Be accurate.`;
 
     const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
     
@@ -158,12 +159,11 @@ Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
     let origin = extractField(scanResult, 'Origin', 100) || extractField(scanResult, 'origin', 100) || 'Unknown origin';
     let extractedMaterial = extractField(scanResult, 'Material', 100) || extractField(scanResult, 'material', 100) || material;
     let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
-    let storage = extractField(scanResult, 'Storage', 100) || extractField(scanResult, 'storage', 100) || 'Store in a dry, cool place.';
+    let rarityStr = extractField(scanResult, 'Rarity') || extractField(scanResult, 'rarity') || 'unknown';
+    let storage = extractField(scanResult, 'Storage') || extractField(scanResult, 'storage') || 'Store in a dry, cool place.';
     // Clean up storage - remove any "Next Step:" or similar garbage
     storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
-    // Limit storage to first sentence, max 200 chars
-    const storageParts = storage.split(/[.!?]/);
-    storage = storageParts[0].trim().substring(0, 200);
+    // Keep full storage text, no truncation
     if (!storage) storage = 'Store in a dry, cool place.';
     let visual = extractField(scanResult, 'Description') || extractField(scanResult, 'description') || '';
     let historicalContext = extractField(scanResult, 'Historical Context') || extractField(scanResult, 'Historical') || '';
@@ -184,6 +184,13 @@ Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
     if (!name) name = 'Unknown object';
     
     const confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
+    // Normalize rarity to valid values
+    let rarity = 'unknown';
+    const rarityLower = rarityStr.toLowerCase();
+    if (rarityLower.includes('common')) rarity = 'common';
+    else if (rarityLower.includes('uncommon')) rarity = 'uncommon';
+    else if (rarityLower.includes('rare')) rarity = 'rare';
+    else if (rarityLower.includes('very') || rarityLower.includes('legendary')) rarity = 'very_rare';
     
     const isCoin = name.toLowerCase().includes('coin');
     const isPipe = name.toLowerCase().includes('pipe');
@@ -198,7 +205,7 @@ Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
         description: { en: visual },
         historical_context: { en: historicalContext },
         confidence: confidence,
-        rarity: 'unknown',
+        rarity: rarity,
         similar_finds: similarFinds,
         reference_links: []
       },
@@ -296,6 +303,7 @@ async function handleTranslate(body: any): Promise<Response> {
     const { identification, storage_instructions, targetLanguage } = body;
     
     const descriptionEn = identification?.description?.en || '';
+    const historicalContextEn = identification?.historical_context?.en || '';
     const storageEn = storage_instructions?.en || '';
     
     if (!descriptionEn && !storageEn) {
@@ -318,8 +326,9 @@ async function handleTranslate(body: any): Promise<Response> {
     const targetLang = langMap[targetLanguage] || 'Dutch';
     
     const transPrompt = `Translate to ${targetLang}. Return ONLY JSON:
-{"desc":"[description]","storage":"[storage]"}
+{"desc":"[description]","context":"[historical context]","storage":"[storage]"}
 Description: ${descriptionEn}
+Context: ${historicalContextEn}
 Storage: ${storageEn}`;
     
     const transResult = await callAI(transPrompt, '', 1024);
@@ -341,7 +350,9 @@ Storage: ${storageEn}`;
         description: {
           [langKey]: translations.desc || ''
         },
-        historical_context: {}
+        historical_context: {
+          [langKey]: translations.context || ''
+        }
       },
       storage_instructions: {
         [langKey]: translations.storage || ''

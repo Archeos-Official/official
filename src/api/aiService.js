@@ -96,40 +96,53 @@ export const translateDiscovery = async (identification, storage_instructions, t
     }
 
     try {
-        const response = await fetch(AI_WORKER_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'translate',
-                identification,
-                storage_instructions,
-                targetLanguage
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Translation failed');
-        }
-
-        const translations = await response.json();
+        const langMap = {
+            'nl': 'nl',
+            'de': 'de',
+            'fr': 'fr',
+            'es': 'es',
+            'el': 'el'
+        };
+        const langCode = langMap[targetLanguage] || 'nl';
+        
+        const descriptionEn = identification?.description?.en || '';
+        const contextEn = identification?.historical_context?.en || '';
+        const storageEn = storage_instructions?.en || '';
+        
+        const translateText = async (text) => {
+            if (!text) return '';
+            try {
+                const response = await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${langCode}`
+                );
+                const data = await response.json();
+                return data.responseData?.translatedText || text;
+            } catch {
+                return text;
+            }
+        };
+        
+        const [descTrans, contextTrans, storageTrans] = await Promise.all([
+            translateText(descriptionEn),
+            translateText(contextEn),
+            translateText(storageEn)
+        ]);
         
         return {
             identification: {
                 ...identification,
                 description: {
                     ...identification.description,
-                    ...translations.identification?.description
+                    [targetLanguage]: descTrans
                 },
                 historical_context: {
                     ...identification.historical_context,
-                    ...translations.identification?.historical_context
+                    [targetLanguage]: contextTrans
                 }
             },
             storage_instructions: {
                 ...storage_instructions,
-                ...translations.storage_instructions
+                [targetLanguage]: storageTrans
             }
         };
     } catch (error) {

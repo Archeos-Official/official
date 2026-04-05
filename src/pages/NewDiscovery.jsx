@@ -135,7 +135,8 @@ export default function NewDiscovery() {
             }
             setUploads(uploadedUrls);
 
-            setAnalyzeStatus('analyze');
+            setAnalyzeStatus('upload');
+            setTimeout(() => setAnalyzeStatus('analyze'), 500);
             const result = await analyzeArtifact(uploadedUrls, form, language);
             
             setAnalyzeStatus('complete');
