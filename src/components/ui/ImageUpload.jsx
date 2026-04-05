@@ -1,65 +1,10 @@
 import React, { useRef, useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Camera, Upload, X, Loader2, AlertTriangle } from 'lucide-react';
-
-const checkImageQuality = (file) => {
-    return new Promise((resolve) => {
-        const warnings = [];
-        const img = new Image();
-        const objectUrl = URL.createObjectURL(file);
-        
-        img.onload = () => {
-            const { width, height } = img;
-            
-            if (width < 300 || height < 300) {
-                warnings.push('Image is quite small. Higher resolution gives better results.');
-            }
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            let totalBrightness = 0;
-            let darkPixels = 0;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                totalBrightness += brightness;
-                if (brightness < 50) darkPixels++;
-            }
-            
-            const avgBrightness = totalBrightness / (data.length / 4);
-            const darkRatio = darkPixels / (data.length / 4);
-            
-            if (avgBrightness < 80) {
-                warnings.push('Image is quite dark. Try better lighting for clearer results.');
-            }
-            
-            if (darkRatio > 0.3) {
-                warnings.push('Large dark areas detected. The object may not be clearly visible.');
-            }
-            
-            URL.revokeObjectURL(objectUrl);
-            resolve(warnings);
-        };
-        
-        img.onerror = () => {
-            resolve(['Could not analyze image.']);
-            URL.revokeObjectURL(objectUrl);
-        };
-        
-        img.src = objectUrl;
-    });
-};
+import { Camera, Upload, X, Loader2 } from 'lucide-react';
 
 export default function ImageUpload({ onImageUploaded, darkMode }) {
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState(null);
-    const [warnings, setWarnings] = useState([]);
     const fileInputRef = useRef(null);
     const cameraInputRef = useRef(null);
 
@@ -68,10 +13,7 @@ export default function ImageUpload({ onImageUploaded, darkMode }) {
         setUploading(true);
         const objectUrl = URL.createObjectURL(file);
         setPreview(objectUrl);
-        
-        const qualityWarnings = await checkImageQuality(file);
-        setWarnings(qualityWarnings);
-        
+        // Pass the file object directly
         onImageUploaded(file);
         setUploading(false);
     };
@@ -83,7 +25,6 @@ export default function ImageUpload({ onImageUploaded, darkMode }) {
 
     const clearImage = () => {
         setPreview(null);
-        setWarnings([]);
         onImageUploaded(null);
     };
 
@@ -124,23 +65,6 @@ export default function ImageUpload({ onImageUploaded, darkMode }) {
                     </div>
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
                     <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden" />
-                </div>
-            )}
-            
-            {warnings.length > 0 && (
-                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                    <div className="flex items-center gap-2 text-amber-700 mb-2">
-                        <AlertTriangle className="w-4 h-4" />
-                        <span className="text-sm font-medium">Image quality tips</span>
-                    </div>
-                    <ul className="space-y-1">
-                        {warnings.map((warning, i) => (
-                            <li key={i} className="text-xs text-amber-600 flex items-start gap-1">
-                                <span className="mt-1">•</span>
-                                {warning}
-                            </li>
-                        ))}
-                    </ul>
                 </div>
             )}
         </div>
