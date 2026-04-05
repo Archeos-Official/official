@@ -105,9 +105,15 @@ export const translateDiscovery = async (identification, storage_instructions, t
         };
         const langCode = langMap[targetLanguage] || 'nl';
         
-        const descriptionEn = identification?.description?.en || '';
-        const contextEn = identification?.historical_context?.en || '';
-        const storageEn = storage_instructions?.en || '';
+        const fieldsToTranslate = {
+            description: identification?.description?.en || '',
+            historical_context: identification?.historical_context?.en || '',
+            similar_finds: identification?.similar_finds || '',
+            name: identification?.name || '',
+            period: identification?.period || '',
+            origin: identification?.origin || '',
+            material: identification?.material || ''
+        };
         
         const translateText = async (text) => {
             if (!text) return '';
@@ -122,23 +128,39 @@ export const translateDiscovery = async (identification, storage_instructions, t
             }
         };
         
-        const [descTrans, contextTrans, storageTrans] = await Promise.all([
-            translateText(descriptionEn),
-            translateText(contextEn),
-            translateText(storageEn)
-        ]);
+        const results = await Promise.all(
+            Object.values(fieldsToTranslate).map(t => translateText(t))
+        );
+        
+        const translated = {
+            description: results[0],
+            historical_context: results[1],
+            similar_finds: results[2],
+            name: results[3],
+            period: results[4],
+            origin: results[5],
+            material: results[6]
+        };
+        
+        const storageEn = storage_instructions?.en || '';
+        const storageTrans = await translateText(storageEn);
         
         return {
             identification: {
                 ...identification,
+                name: translated.name,
+                period: translated.period,
+                origin: translated.origin,
+                material: translated.material,
                 description: {
                     ...identification.description,
-                    [targetLanguage]: descTrans
+                    [targetLanguage]: translated.description
                 },
                 historical_context: {
                     ...identification.historical_context,
-                    [targetLanguage]: contextTrans
-                }
+                    [targetLanguage]: translated.historical_context
+                },
+                similar_finds: translated.similar_finds
             },
             storage_instructions: {
                 ...storage_instructions,

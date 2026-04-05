@@ -40,8 +40,13 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
     
     // Check if current language is available
     const hasLocalTranslation = analysis.description?.[language] && analysis.description[language].length > 10;
+    const currentName = translatedData?.identification?.name || analysis.name || '';
+    const currentPeriod = translatedData?.identification?.period || analysis.period || '';
+    const currentOrigin = translatedData?.identification?.origin || analysis.origin || '';
+    const currentMaterial = translatedData?.identification?.material || analysis.material || '';
     const currentDescription = translatedData?.identification?.description?.[language] || analysis.description?.[language] || analysis.description?.en || '';
     const currentContext = translatedData?.identification?.historical_context?.[language] || analysis.historical_context?.[language] || analysis.historical_context?.en || '';
+    const currentSimilarFinds = translatedData?.identification?.similar_finds || analysis.similar_finds || '';
     const currentStorage = translatedData?.storage_instructions?.[language] || storageInstructions?.[language] || storageInstructions?.en || '';
     
     const handleTranslate = async () => {
@@ -115,7 +120,7 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
 
             <div className="space-y-4">
                 <div>
-                    <h4 className={`text-2xl font-bold ${darkMode ? 'text-[#f4d0a8]' : 'text-[#8f5428]'}`}>{analysis.name}</h4>
+                    <h4 className={`text-2xl font-bold ${darkMode ? 'text-[#f4d0a8]' : 'text-[#8f5428]'}`}>{currentName}</h4>
                     <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="default" className={confidenceColor}>{analysis.confidence}% {t('confidence')}</Badge>
                         <Badge variant="default" className={rarityColor}>{analysis.rarity?.replace('_', ' ')}</Badge>
@@ -137,32 +142,32 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                         <Calendar className="w-4 h-4 text-[#b66c34] mt-1" />
                         <div>
                             <p className={`text-xs uppercase tracking-wide ${textMuted}`}>{t('period')}</p>
-                            <p className={`font-medium ${textMain}`}>{analysis.period}</p>
+                            <p className={`font-medium ${textMain}`}>{currentPeriod}</p>
                         </div>
                     </div>
                     <div className="flex items-start gap-3">
                         <MapPin className="w-4 h-4 text-[#b66c34] mt-1" />
                         <div>
                             <p className={`text-xs uppercase tracking-wide ${textMuted}`}>{t('origin')}</p>
-                            <p className={`font-medium ${textMain}`}>{analysis.origin}</p>
+                            <p className={`font-medium ${textMain}`}>{currentOrigin}</p>
                         </div>
                     </div>
                     <div className="flex items-start gap-3">
                         <Gem className="w-4 h-4 text-[#b66c34] mt-1" />
                         <div>
                             <p className={`text-xs uppercase tracking-wide ${textMuted}`}>{t('material')}</p>
-                            <p className={`font-medium ${textMain}`}>{analysis.material}</p>
+                            <p className={`font-medium ${textMain}`}>{currentMaterial}</p>
                         </div>
                     </div>
                 </div>
 
-                {analysis.similar_finds && (
+                {currentSimilarFinds && (
                     <div className={`p-4 rounded-xl border ${subBg}`}>
                         <div className="flex items-center gap-2 mb-2">
                             <Database className="w-4 h-4 text-[#b66c34]" />
                             <p className={`font-medium ${darkMode ? 'text-[#f4d0a8]' : 'text-[#8f5428]'}`}>{t('similarFinds')}</p>
                         </div>
-                        <p className={`text-sm ${textMain}`}>{analysis.similar_finds}</p>
+                        <p className={`text-sm ${textMain}`}>{currentSimilarFinds}</p>
                     </div>
                 )}
 
