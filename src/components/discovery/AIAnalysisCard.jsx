@@ -122,14 +122,14 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                     </div>
                 </div>
 
-                {currentContext && (
+                {currentDescription && (
                     <div className={`p-3 rounded-lg ${subBg}`}>
-                        <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
+                        <p className={`text-sm ${textMain}`}>{currentDescription}</p>
                     </div>
                 )}
 
-                {currentDescription && (
-                    <p className={textMain}>{currentDescription}</p>
+                {currentContext && (
+                    <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
                 )}
 
                 <div className="grid grid-cols-2 gap-4">

@@ -161,9 +161,9 @@ Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
     let storage = extractField(scanResult, 'Storage', 100) || extractField(scanResult, 'storage', 100) || 'Store in a dry, cool place.';
     // Clean up storage - remove any "Next Step:" or similar garbage
     storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
-    // Limit storage to first sentence, max 100 chars
+    // Limit storage to first sentence, max 200 chars
     const storageParts = storage.split(/[.!?]/);
-    storage = storageParts[0].trim().substring(0, 100);
+    storage = storageParts[0].trim().substring(0, 200);
     if (!storage) storage = 'Store in a dry, cool place.';
     let visual = extractField(scanResult, 'Description') || extractField(scanResult, 'description') || '';
     let historicalContext = extractField(scanResult, 'Historical Context') || extractField(scanResult, 'Historical') || '';
