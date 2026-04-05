@@ -20,7 +20,7 @@ import { analyzeArtifact, deepResearchArtifact, translateDiscovery } from '@/api
 import { supabase } from '@/api/supabaseClient';
 
 const StepItem = ({ status, step, darkMode, label }) => {
-    const steps = ['upload', 'scan', 'research'];
+    const steps = ['upload', 'analyze', 'translating', 'complete'];
     const currentIndex = steps.indexOf(status);
     const stepIndex = steps.indexOf(step);
     
@@ -136,10 +136,12 @@ export default function NewDiscovery() {
             setUploads(uploadedUrls);
 
             setAnalyzeStatus('upload');
-            setTimeout(() => setAnalyzeStatus('analyze'), 500);
-            const result = await analyzeArtifact(uploadedUrls, form, language);
             
-            setAnalyzeStatus('complete');
+            // Small delay then start analysis
+            await new Promise(r => setTimeout(r, 300));
+            setAnalyzeStatus('analyze');
+            
+            const result = await analyzeArtifact(uploadedUrls, form, language);
             
             console.log('Analysis result:', result);
 
@@ -166,10 +168,14 @@ export default function NewDiscovery() {
                 finalStorage = translated.storage_instructions;
             }
             
+            setAnalyzeStatus('complete');
+            
             // Set results
             setAnalysis(finalIdentification);
             setStorageInstructions(finalStorage);
             setForm(prev => ({ ...prev, name: finalIdentification?.name || prev.name }));
+            
+            await new Promise(r => setTimeout(r, 800));
             
             setAnalyzing(false);
             setAnalyzeStatus('');
@@ -525,12 +531,12 @@ export default function NewDiscovery() {
                             {t('aiAnalysis')}
                         </h3>
                         <p className={`text-sm animate-pulse ${darkMode ? 'text-gray-400' : 'text-[#8f7a6a]'}`}>
-                            {analyzeStatus || t('analyzing')}
+                            {analyzeStatus === 'upload' ? t('uploadingImages') : analyzeStatus === 'analyze' ? t('analyzing') : analyzeStatus === 'translating' ? t('translating') : t('analyzing')}
                         </p>
                         <div className="mt-6 space-y-2">
                             <StepItem status={analyzeStatus} step="upload" darkMode={darkMode} label={t('uploadPhoto')} />
-                            <StepItem status={analyzeStatus} step="scan" darkMode={darkMode} label={t('scanning')} />
-                            <StepItem status={analyzeStatus} step="research" darkMode={darkMode} label={t('researching')} />
+                            <StepItem status={analyzeStatus} step="analyze" darkMode={darkMode} label={t('scanning')} />
+                            <StepItem status={analyzeStatus} step="translating" darkMode={darkMode} label={t('translating')} />
                         </div>
                     </div>
                 </div>
