@@ -40,6 +40,7 @@ const translations = {
         analyzing: 'Analyzing...',
         scanning: 'Scanning...',
         researching: 'Researching...',
+        translating: 'Translating...',
         uploadingImages: 'Uploading images...',
         step1: 'Step 1',
         step2: 'Step 2',

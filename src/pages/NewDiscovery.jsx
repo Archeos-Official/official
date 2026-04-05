@@ -16,7 +16,7 @@ import { useLanguage } from '@/components/LanguageContext';
 import { useAuth } from '@/lib/AuthContext';
 import { projectsApi, creditLogsApi } from '@/api/supabaseApi';
 import { uploadImage } from '@/api/storage';
-import { analyzeArtifact, deepResearchArtifact } from '@/api/aiService';
+import { analyzeArtifact, deepResearchArtifact, translateDiscovery } from '@/api/aiService';
 import { supabase } from '@/api/supabaseClient';
 
 const StepItem = ({ status, step, darkMode, label }) => {
@@ -155,10 +155,21 @@ export default function NewDiscovery() {
             const archaeological = result.is_archaeological !== false;
             setIsArchaeological(archaeological);
             
-            // Set results directly (English only for speed)
-            setAnalysis(result.identification);
-            setStorageInstructions(result.storage_instructions);
-            setForm(prev => ({ ...prev, name: result.identification?.name || prev.name }));
+            let finalIdentification = result.identification;
+            let finalStorage = result.storage_instructions;
+            
+            // Auto-translate if not English
+            if (language !== 'en') {
+                setAnalyzeStatus('translating');
+                const translated = await translateDiscovery(result.identification, result.storage_instructions, language);
+                finalIdentification = translated.identification;
+                finalStorage = translated.storage_instructions;
+            }
+            
+            // Set results
+            setAnalysis(finalIdentification);
+            setStorageInstructions(finalStorage);
+            setForm(prev => ({ ...prev, name: finalIdentification?.name || prev.name }));
             
             setAnalyzing(false);
             setAnalyzeStatus('');
