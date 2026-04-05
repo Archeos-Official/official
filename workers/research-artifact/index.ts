@@ -100,8 +100,8 @@ Similar: [brief mention of similar known finds or "None found"]
 If unclear from description, say "Unknown".`;
 
       const result = base64Image 
-        ? await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 600)
-        : await callAI(researchPrompt, undefined, 600);
+        ? await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 1500)
+        : await callAI(researchPrompt, undefined, 1500);
       
       // Extract period, origin, context, similar
       const periodMatch = result.match(/Period:\s*(.+?)(?:\n|$)/i);

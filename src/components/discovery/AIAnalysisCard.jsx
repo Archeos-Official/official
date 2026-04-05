@@ -126,12 +126,6 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                     <p className={textMain}>{currentDescription}</p>
                 )}
 
-                {currentContext && (
-                    <div className={`p-3 rounded-lg ${subBg}`}>
-                        <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
-                    </div>
-                )}
-
                 <div className="grid grid-cols-2 gap-4">
                     <div className="flex items-start gap-3">
                         <Calendar className="w-4 h-4 text-[#b66c34] mt-1" />
@@ -155,6 +149,12 @@ export default function AIAnalysisCard({ analysis, storageInstructions, darkMode
                         </div>
                     </div>
                 </div>
+
+                {currentContext && (
+                    <div className={`p-3 rounded-lg ${subBg}`}>
+                        <p className={`text-sm italic ${textMain}`}>{currentContext}</p>
+                    </div>
+                )}
 
                 {analysis.similar_finds && (
                     <div className={`p-4 rounded-xl border ${subBg}`}>

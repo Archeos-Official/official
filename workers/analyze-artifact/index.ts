@@ -126,51 +126,53 @@ Look carefully at the OBJECT ONLY - ignore background, case, display.
 
 Identify the object AND research its history in ONE response:
 
-1. Name: [what the object IS - be specific, e.g. "WWII German steel helmet", "Roman bronze coin", "19th century clay pipe"]
-2. Period: [specific time period - e.g. "1550-1700 BCE", "1940s WWII", "17th century Dutch"]
-3. Origin: [region/country of origin - e.g. "Egypt", "Northern Europe", "Japan"]
-4. Material: [what it's made of - e.g. "steel", "bronze", "ceramic", "iron"]
-5. Description: [detailed description of what you see - 4-6 sentences]
-6. Historical Context: [2-3 sentences about when/how this type of object was used, why it's significant]
-7. Similar Finds: [1-2 sentences about similar known artifacts or "No well-documented similar finds"]
-8. Storage: [ONE simple sentence for home storage - be practical for amateurs]
+1. Name: [what the object IS - be specific, e.g. "WWII German steel helmet", "Roman bronze coin"]
+2. Period: [specific time period - e.g. "1550-1700 BCE", "1940s WWII", "17th century"]
+3. Origin: [region/country - e.g. "Egypt", "Northern Europe", "Japan"]
+4. Material: [what it's made of - e.g. "steel", "bronze", "ceramic"]
+5. Description: [detailed description - 4-6 sentences]
+6. Historical Context: [2-3 sentences about significance]
+7. Similar Finds: [1-2 sentences about similar artifacts]
+8. Storage: [ONE simple sentence for home storage]
+9. Confidence: [70-95 - based on how clearly identifiable the object is]
 
-Be accurate with time periods. A WWII helmet is NOT a medieval knight helmet.`;
+Be accurate. A WWII helmet is NOT a medieval knight helmet.`;
 
     const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
     
     // Robust extraction - find text after field name and colon
-    const extractField = (text: string, field: string): string => {
+    const extractField = (text: string, field: string, maxLen = 0): string => {
       const regex = new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i');
       const match = text.match(regex);
       if (match) {
         // Clean: remove ** prefixes and trim
         let val = match[1].replace(/^\*+\s*/g, '').replace(/\*+$/g, '').trim();
-        if (val.length > 100) val = val.substring(0, 100) + '...';
+        if (maxLen > 0 && val.length > maxLen) val = val.substring(0, maxLen) + '...';
         return val;
       }
       return '';
     };
     
-    let name = extractField(scanResult, 'Name') || extractField(scanResult, 'name') || '';
-    let period = extractField(scanResult, 'Period') || extractField(scanResult, 'period') || 'Unknown period';
-    let origin = extractField(scanResult, 'Origin') || extractField(scanResult, 'origin') || 'Unknown origin';
-    let extractedMaterial = extractField(scanResult, 'Material') || extractField(scanResult, 'material') || material;
+    let name = extractField(scanResult, 'Name', 100) || extractField(scanResult, 'name', 100) || '';
+    let period = extractField(scanResult, 'Period', 100) || extractField(scanResult, 'period', 100) || 'Unknown period';
+    let origin = extractField(scanResult, 'Origin', 100) || extractField(scanResult, 'origin', 100) || 'Unknown origin';
+    let extractedMaterial = extractField(scanResult, 'Material', 100) || extractField(scanResult, 'material', 100) || material;
     let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
-    let storage = extractField(scanResult, 'Storage') || extractField(scanResult, 'storage') || 'Store in a dry, cool place.';
+    let storage = extractField(scanResult, 'Storage', 100) || extractField(scanResult, 'storage', 100) || 'Store in a dry, cool place.';
     // Clean up storage - remove any "Next Step:" or similar garbage
     storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
-    // Limit storage to first 80 chars max
-    if (storage.length > 80) storage = storage.substring(0, 80) + '...';
+    // Limit storage to first sentence, max 100 chars
+    const storageParts = storage.split(/[.!?]/);
+    storage = storageParts[0].trim().substring(0, 100);
     if (!storage) storage = 'Store in a dry, cool place.';
     let visual = extractField(scanResult, 'Description') || extractField(scanResult, 'description') || '';
     let historicalContext = extractField(scanResult, 'Historical Context') || extractField(scanResult, 'Historical') || '';
     let similarFinds = extractField(scanResult, 'Similar Finds') || extractField(scanResult, 'Similar') || '';
     
-    // Allow longer description - up to 800 chars
-    if (visual.length > 800) visual = visual.substring(0, 800) + '...';
-    if (historicalContext.length > 500) historicalContext = historicalContext.substring(0, 500) + '...';
-    if (similarFinds.length > 300) similarFinds = similarFinds.substring(0, 300) + '...';
+    // Allow much longer text - up to 1500 chars
+    if (visual.length > 1500) visual = visual.substring(0, 1500) + '...';
+    if (historicalContext.length > 1000) historicalContext = historicalContext.substring(0, 1000) + '...';
+    if (similarFinds.length > 500) similarFinds = similarFinds.substring(0, 500) + '...';
     
     if (visual.length < 10) visual = 'Object requires further analysis';
     if (!historicalContext) historicalContext = 'No historical context available.';
@@ -180,11 +182,6 @@ Be accurate with time periods. A WWII helmet is NOT a medieval knight helmet.`;
       if (nameLine) name = nameLine.replace(/.*name:/i, '').trim();
     }
     if (!name) name = 'Unknown object';
-    
-    // Only take first sentence for storage, keep it very short
-    const storageParts = storage.split(/[.!?]/);
-    storage = storageParts[0].trim().substring(0, 60);
-    if (!storage) storage = 'Store in a dry, cool place.';
     
     const confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
     
