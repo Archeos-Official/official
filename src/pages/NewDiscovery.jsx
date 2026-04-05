@@ -211,6 +211,11 @@ export default function NewDiscovery() {
 
         createMutation.mutate(payload, {
             onSuccess: async (data) => {
+                if (!isArchaeological) {
+                    navigate(createPageUrl('Home'));
+                    return;
+                }
+                
                 await creditLogsApi.create({
                     discovery_id: data.id,
                     discovery_name: data.name,
