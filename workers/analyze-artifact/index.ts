@@ -71,7 +71,7 @@ export default {
       const body = await request.json();
       const { action } = body;
       
-      if (action === 'scan') {
+      if (action === 'scan' || action === 'identify') {
         return handleScan(body);
       }
       
@@ -119,29 +119,37 @@ async function handleScan(body: any): Promise<Response> {
       }
     }
 
-    const materialContext = material ? `The user confirmed: object is made from ${material}.` : '';
+    // ONE STEP: Full identification + research in single AI call
+    const scanPrompt = `You are an expert archaeologist analyzing this find. 
 
-    const scanPrompt = `You are an archaeologist analyzing a discovery image. Identify the object.
+Look carefully at the OBJECT ONLY - ignore background, case, display.
 
-Look at the image and provide a brief identification.
+Identify the object AND research its history in ONE response:
 
-**Name:** [one line - what is this? e.g., "Bronze coin", "Clay pot fragment", "Iron nail"]
-**Period:** [time period - e.g., "Roman era", "19th century", "Medieval"]
-**Origin:** [region - e.g., "Northern Europe", "Mediterranean"]
-**Material:** [what it's made of - e.g., "bronze", "ceramic", "iron"]
-**Confidence:** [0-100]
-**Visual:** [2 sentence description of what you see]
-**Storage:** [very brief]
+1. Name: [what the object IS - be specific, e.g. "WWII German steel helmet", "Roman bronze coin", "19th century clay pipe"]
+2. Period: [specific time period - e.g. "1550-1700 BCE", "1940s WWII", "17th century Dutch"]
+3. Origin: [region/country of origin - e.g. "Egypt", "Northern Europe", "Japan"]
+4. Material: [what it's made of - e.g. "steel", "bronze", "ceramic", "iron"]
+5. Description: [detailed description of what you see - 4-6 sentences]
+6. Historical Context: [2-3 sentences about when/how this type of object was used, why it's significant]
+7. Similar Finds: [1-2 sentences about similar known artifacts or "No well-documented similar finds"]
+8. Storage: [ONE simple sentence for home storage - be practical for amateurs]
 
-${materialContext}`;
+Be accurate with time periods. A WWII helmet is NOT a medieval knight helmet.`;
 
-    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 600);
+    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
     
-    // Robust extraction - find text between **Name:** and next **
+    // Robust extraction - find text after field name and colon
     const extractField = (text: string, field: string): string => {
-      const regex = new RegExp(`\\*\\*${field}:\\*\\*\\s*([^\\n]+)`, 'i');
+      const regex = new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i');
       const match = text.match(regex);
-      return match ? match[1].trim() : '';
+      if (match) {
+        // Clean: remove ** prefixes and trim
+        let val = match[1].replace(/^\*+\s*/g, '').replace(/\*+$/g, '').trim();
+        if (val.length > 100) val = val.substring(0, 100) + '...';
+        return val;
+      }
+      return '';
     };
     
     let name = extractField(scanResult, 'Name') || extractField(scanResult, 'name') || '';
@@ -150,14 +158,33 @@ ${materialContext}`;
     let extractedMaterial = extractField(scanResult, 'Material') || extractField(scanResult, 'material') || material;
     let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
     let storage = extractField(scanResult, 'Storage') || extractField(scanResult, 'storage') || 'Store in a dry, cool place.';
-    let visual = extractField(scanResult, 'Visual') || extractField(scanResult, 'visual') || '';
+    // Clean up storage - remove any "Next Step:" or similar garbage
+    storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
+    // Limit storage to first 80 chars max
+    if (storage.length > 80) storage = storage.substring(0, 80) + '...';
+    if (!storage) storage = 'Store in a dry, cool place.';
+    let visual = extractField(scanResult, 'Description') || extractField(scanResult, 'description') || '';
+    let historicalContext = extractField(scanResult, 'Historical Context') || extractField(scanResult, 'Historical') || '';
+    let similarFinds = extractField(scanResult, 'Similar Finds') || extractField(scanResult, 'Similar') || '';
     
-    // Fallback: if name is empty, try to find any line with "Name:" or just use the whole response
+    // Allow longer description - up to 800 chars
+    if (visual.length > 800) visual = visual.substring(0, 800) + '...';
+    if (historicalContext.length > 500) historicalContext = historicalContext.substring(0, 500) + '...';
+    if (similarFinds.length > 300) similarFinds = similarFinds.substring(0, 300) + '...';
+    
+    if (visual.length < 10) visual = 'Object requires further analysis';
+    if (!historicalContext) historicalContext = 'No historical context available.';
+    if (!similarFinds) similarFinds = '';
     if (!name) {
       const nameLine = scanResult.split('\n').find(l => l.toLowerCase().includes('name:'));
       if (nameLine) name = nameLine.replace(/.*name:/i, '').trim();
     }
     if (!name) name = 'Unknown object';
+    
+    // Only take first sentence for storage, keep it very short
+    const storageParts = storage.split(/[.!?]/);
+    storage = storageParts[0].trim().substring(0, 60);
+    if (!storage) storage = 'Store in a dry, cool place.';
     
     const confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
     
@@ -172,10 +199,10 @@ ${materialContext}`;
         origin: origin,
         material: extractedMaterial || material,
         description: { en: visual },
-        historical_context: { en: '' },
+        historical_context: { en: historicalContext },
         confidence: confidence,
         rarity: 'unknown',
-        similar_finds: '',
+        similar_finds: similarFinds,
         reference_links: []
       },
       storage_instructions: { en: storage },

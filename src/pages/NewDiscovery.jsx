@@ -135,32 +135,29 @@ export default function NewDiscovery() {
             }
             setUploads(uploadedUrls);
 
-            setAnalyzeStatus('scan');
-            const scanResult = await analyzeArtifact(uploadedUrls, form, language);
-            
-            setAnalyzeStatus('research');
-            const researchResult = await deepResearchArtifact(scanResult, language, uploadedUrls);
+            setAnalyzeStatus('analyze');
+            const result = await analyzeArtifact(uploadedUrls, form, language);
             
             setAnalyzeStatus('complete');
             
-            console.log('Research result:', researchResult);
+            console.log('Analysis result:', result);
 
-            if (form.material && researchResult.identification) {
-                researchResult.identification.material = form.material;
+            if (form.material && result.identification) {
+                result.identification.material = form.material;
             }
 
             const links = [];
-            if (researchResult.is_coin) links.push({ label: 'Duiten.nl – Dutch Coin Reference', url: 'https://www.duiten.nl' });
-            if (researchResult.is_pipe) links.push({ label: 'Kleipijpen.nl – Clay Pipe Reference', url: 'https://www.kleipijpen.nl' });
+            if (result.is_coin) links.push({ label: 'Duiten.nl – Dutch Coin Reference', url: 'https://www.duiten.nl' });
+            if (result.is_pipe) links.push({ label: 'Kleipijpen.nl – Clay Pipe Reference', url: 'https://www.kleipijpen.nl' });
             setReferenceLinks(links);
 
-            const archaeological = researchResult.is_archaeological !== false;
+            const archaeological = result.is_archaeological !== false;
             setIsArchaeological(archaeological);
             
             // Set results directly (English only for speed)
-            setAnalysis(researchResult.identification);
-            setStorageInstructions(researchResult.storage_instructions);
-            setForm(prev => ({ ...prev, name: researchResult.identification?.name || prev.name }));
+            setAnalysis(result.identification);
+            setStorageInstructions(result.storage_instructions);
+            setForm(prev => ({ ...prev, name: result.identification?.name || prev.name }));
             
             setAnalyzing(false);
             setAnalyzeStatus('');

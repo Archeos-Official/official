@@ -7,12 +7,16 @@ const corsHeaders = {
 const ACCOUNT_ID = 'a0aea21f8b422b03ea28d79829060046';
 const API_TOKEN = 'cfut_WS2J372BIQpzpCiyTG3gChdyVWnSZ1mozJXp1lz6a754da42';
 
-async function callAI(prompt: string, maxTokens: number = 1000): Promise<string> {
-  const body = {
+async function callAI(prompt: string, image?: string, maxTokens: number = 1000): Promise<string> {
+  const body: any = {
     stream: false,
     prompt: prompt,
     max_tokens: maxTokens
   };
+  
+  if (image) {
+    body.image = image;
+  }
   
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
@@ -57,72 +61,73 @@ export default {
 
     try {
       const body = await request.json();
-      const { description, observations } = body;
+      const { description, observations, image_urls, name: existingName, material: existingMaterial } = body;
       
       const obs = observations || {};
       const desc = description || '';
       
-      // Clean up description - take only first 300 chars to avoid too much detail
+      // Get the image for deeper analysis
+      let base64Image = '';
+      if (image_urls && image_urls.length > 0) {
+        try {
+          const imgRes = await fetch(image_urls[0]);
+          const blob = await imgRes.arrayBuffer();
+          const uint8 = new Uint8Array(blob);
+          
+          let binary = '';
+          for (let i = 0; i < uint8.length; i++) {
+            binary += String.fromCharCode(uint8[i]);
+          }
+          base64Image = btoa(binary);
+        } catch {}
+      }
+      
       const shortDesc = desc.length > 300 ? desc.substring(0, 300) + '...' : desc;
       
-      const researchPrompt = `You are an archaeologist. Based on this visual description, identify the object.
+      // Research prompt focuses on period, origin, historical context - main focus is description
+      const researchPrompt = `You are an archaeologist. Your MAIN TASK is to analyze the visual description to determine period and origin.
 
-VISUAL DESCRIPTION: ${shortDesc || 'Unknown object'}
+FOCUS ON DESCRIPTION: ${shortDesc || 'Unknown object'}
 
-KEY OBSERVATIONS:
-- Shape: ${obs.shape || 'unknown'}
-- Size: ${obs.size || 'unknown'}  
-- Colors: ${obs.colors || 'unknown'}
-- Surface: ${obs.surface || 'unknown'}
-- Features: ${obs.features || 'none'}
-- Material guess: ${obs.material || 'unknown'}
+KNOWN INFO: Name="${existingName || 'Unknown'}", Material="${existingMaterial || 'Unknown'}"
 
-Respond with ONLY this format (short answers):
+Respond with ONLY:
+Period: [estimated era - be specific if possible]
+Origin: [likely region]
+Context: [1-2 sentences about historical significance]
+Similar: [brief mention of similar known finds or "None found"]
 
-**Name:** [e.g., "Stone grinding tool" or "Clay pot fragment" - keep it short]
-**Period:** [e.g., "Neolithic" or "Roman era" - or "Unknown"]
-**Origin:** [e.g., "Northern Europe" - or "Unknown"]
-**Material:** [What it's made of - stone, ceramic, metal, bone, etc.]
-**Context:** [1 sentence about historical significance]
-**Storage:** [Very brief storage advice]
+If unclear from description, say "Unknown".`;
 
-If truly unknown, say "Unknown" - don't invent details.`;
-
-      const result = await callAI(researchPrompt, 600);
+      const result = base64Image 
+        ? await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 600)
+        : await callAI(researchPrompt, undefined, 600);
       
-      // Simple extraction - match **Field:** value
-      const nameMatch = result.match(/\*\*Name:\*\*\s*(.+?)(?:\n|$)/i);
-      const periodMatch = result.match(/\*\*Period:\*\*\s*(.+?)(?:\n|$)/i);
-      const originMatch = result.match(/\*\*Origin:\*\*\s*(.+?)(?:\n|$)/i);
-      const materialMatch = result.match(/\*\*Material:\*\*\s*(.+?)(?:\n|$)/i);
-      const contextMatch = result.match(/\*\*Context:\*\*\s*(.+?)(?:\n|\*\*|$)/i);
-      const storageMatch = result.match(/\*\*Storage:\*\*\s*(.+?)(?:\n|$)/i);
+      // Extract period, origin, context, similar
+      const periodMatch = result.match(/Period:\s*(.+?)(?:\n|$)/i);
+      const originMatch = result.match(/Origin:\s*(.+?)(?:\n|$)/i);
+      const contextMatch = result.match(/Context:\s*(.+?)(?:\n|Similar|$)/i);
+      const similarMatch = result.match(/Similar:\s*(.+?)(?:\n|$)/i);
       
-      const name = nameMatch ? nameMatch[1].trim() : desc.substring(0, 30) || 'Unknown object';
-      const period = periodMatch ? periodMatch[1].trim() : 'Unknown period';
-      const origin = originMatch ? originMatch[1].trim() : 'Unknown origin';
-      const material = materialMatch ? materialMatch[1].trim() : obs.material || 'Unknown';
-      const context = contextMatch ? contextMatch[1].trim() : '';
-      const storage = storageMatch ? storageMatch[1].trim() : 'Store in a dry, cool place.';
+      // Clean period - allow specific dates/eras
+      let period = periodMatch ? periodMatch[1].trim() : 'Unknown';
+      // Allow full origin text without truncation
+      const origin = originMatch ? originMatch[1].trim() : 'Unknown';
+      const context = contextMatch ? contextMatch[1].trim() : 'No historical context available.';
+      const similar = similarMatch ? similarMatch[1].trim() : '';
       
-      // Calculate confidence based on how much we found
-      let confidence = 40;
-      if (name && !name.includes('Unknown')) confidence += 15;
-      if (period && !period.includes('Unknown')) confidence += 15;
-      if (origin && !origin.includes('Unknown')) confidence += 15;
-      if (context) confidence += 10;
+      // Calculate confidence
+      let confidence = 50;
+      if (period && !period.toLowerCase().includes('unknown')) confidence += 15;
+      if (origin && !origin.toLowerCase().includes('unknown')) confidence += 15;
+      if (context && !context.toLowerCase().includes('no historical')) confidence += 10;
       
       return new Response(JSON.stringify({
-        name: name,
         period: period,
         origin: origin,
-        material: material,
         historical_context: context,
-        similar_finds: '',
-        storage_instructions: storage,
-        confidence: Math.min(confidence, 85),
-        rarity: 'unknown',
-        reference_links: []
+        similar_finds: similar,
+        confidence: Math.min(confidence, 85)
       }), {
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });

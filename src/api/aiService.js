@@ -50,56 +50,33 @@ export const analyzeArtifact = async (imageUrls, context = {}, language = 'en') 
 
 export const deepResearchArtifact = async (scanResult, language = 'en', imageUrls = []) => {
     try {
-        console.log('Deep researching artifact...', scanResult);
+        console.log('Analyzing artifact with full research...', scanResult);
         
-        const identification = scanResult.identification || {};
-        const observations = identification.observations || {};
-        const description = identification.description?.en || '';
-        
-        const response = await fetch(RESEARCH_WORKER_URL, {
+        const response = await fetch(AI_WORKER_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                description: description,
-                observations: observations
+                action: 'identify',
+                image_urls: imageUrls
             })
         });
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Research error: ${response.status} - ${errorText}`);
+            throw new Error(`Analysis error: ${response.status} - ${errorText}`);
         }
 
         const result = await response.json();
         
-        console.log('Research result:', result);
+        console.log('Analysis result:', result);
         
         if (result.error) {
             throw new Error(result.error);
         }
 
-        // Merge research results with scan results
-        return {
-            identification: {
-                ...identification,
-                name: result.name || identification.name,
-                period: result.period || 'Unknown',
-                origin: result.origin || 'Unknown',
-                historical_context: { en: result.historical_context || '' },
-                confidence: result.confidence || identification.confidence || 50,
-                rarity: result.rarity || 'unknown',
-                similar_finds: result.similar_finds || '',
-                reference_links: result.reference_links || []
-            },
-            storage_instructions: {
-                en: result.storage_instructions || identification.storage_instructions?.en || 'Store in a dry, cool place.'
-            },
-            is_coin: (result.name || '').toLowerCase().includes('coin'),
-            is_pipe: (result.name || '').toLowerCase().includes('pipe'),
-            is_archaeological: true
-        };
+        return result;
     } catch (error) {
         console.error('Deep research failed:', error);
         // Return original result if research fails
