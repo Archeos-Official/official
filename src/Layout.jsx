@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
     Home, Sparkles, Map, Users, 
-    FileText, Menu, X, Settings, Shield, User
+    FileText, Menu, X, Settings, Shield, User, Info
 } from 'lucide-react';
 import VaseLogo from '@/components/VaseLogo';
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ export default function Layout({ children, currentPageName }) {
         { name: t('map'), icon: Map, page: 'DiscoveryMap' },
         { name: t('experts'), icon: Users, page: 'Experts' },
         ...(user ? [{ name: t('reports'), icon: FileText, page: 'Reports' }] : []),
+        { name: t('aboutUs'), icon: Info, page: 'AboutUs' },
         { name: t('settings'), icon: Settings, page: 'Settings' },
     ];
 

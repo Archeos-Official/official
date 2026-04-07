@@ -121,6 +121,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const signInWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  };
+
+  const signInWithMicrosoft = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error) {
+      return { data: null, error };
+    }
+  };
+
   const isAdmin = profile?.role === 'admin';
 
   return (
@@ -134,7 +164,9 @@ export const AuthProvider = ({ children }) => {
       logout,
       navigateToLogin,
       signUp,
-      signIn
+      signIn,
+      signInWithGoogle,
+      signInWithMicrosoft
     }}>
       {children}
     </AuthContext.Provider>
