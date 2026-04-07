@@ -8,14 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Shield, User } from 'lucide-react';
+import { Search, Shield, User, Loader2 } from 'lucide-react';
 
 export default function AdminUsers({ darkMode }) {
     const qc = useQueryClient();
     const [search, setSearch] = useState('');
     const [roleDialog, setRoleDialog] = useState(null);
 
-    const { data: users = [] } = useQuery({
+    const { data: users = [], isLoading, error } = useQuery({
         queryKey: ['users'],
         queryFn: () => profilesApi.list()
     });
@@ -32,6 +32,23 @@ export default function AdminUsers({ darkMode }) {
 
     const cardClass = darkMode ? 'bg-gray-800 border-gray-700' : 'border-[#e5b889]';
     const inputClass = darkMode ? 'bg-gray-700 border-gray-600 text-white' : 'border-[#e5b889]';
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center p-8">
+                <Loader2 className={`w-8 h-8 animate-spin ${darkMode ? 'text-[#f4d0a8]' : 'text-[#b66c34]'}`} />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="text-center p-8">
+                <p className={darkMode ? 'text-red-400' : 'text-red-600'}>Failed to load users</p>
+                <p className={`text-sm ${darkMode ? 'text-gray-400' : 'text-[#8f7a6a]'}`}>{error.message}</p>
+            </div>
+        );
+    }
 
     return (
         <div>
@@ -96,7 +113,7 @@ export default function AdminUsers({ darkMode }) {
                     <div className="flex gap-3 justify-end mt-4">
                         <Button variant="outline" onClick={() => setRoleDialog(null)} className={darkMode ? 'border-gray-600 text-white' : ''}>Cancel</Button>
                         <Button className="bg-[#b66c34] hover:bg-[#8f5428] rounded-xl"
-                            onClick={() => updateRoleMutation.mutate({ id: roleDialog.id, role: roleDialog.role })}>
+                            onClick={() => roleDialog && updateRoleMutation.mutate({ id: roleDialog.id, role: roleDialog.role })}>
                             Save
                         </Button>
                     </div>

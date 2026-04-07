@@ -182,6 +182,16 @@ CREATE POLICY "Users can view their own profile"
     ON profiles FOR SELECT
     USING (auth.uid() = id);
 
+-- Admins can view all profiles
+CREATE POLICY "Admins can view all profiles"
+    ON profiles FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
 -- Users can update their own profile
 CREATE POLICY "Users can update their own profile"
     ON profiles FOR UPDATE

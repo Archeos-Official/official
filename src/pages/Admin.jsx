@@ -21,8 +21,8 @@ export default function Admin() {
     const { user, isAdmin, isLoadingAuth } = useAuth();
 
     const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: () => profilesApi.list(), enabled: isAdmin });
-    const { data: projects = [] } = useQuery({ queryKey: ['allProjects'], queryFn: () => projectsApi.list('-created_date'), enabled: isAdmin });
-    const { data: reports = [] } = useQuery({ queryKey: ['allReports'], queryFn: () => reportsApi.list('-created_date'), enabled: isAdmin });
+    const { data: projects = [] } = useQuery({ queryKey: ['allProjects'], queryFn: () => projectsApi.list('-created_at'), enabled: isAdmin });
+    const { data: reports = [] } = useQuery({ queryKey: ['allReports'], queryFn: () => reportsApi.list('-created_at'), enabled: isAdmin });
     const { data: experts = [] } = useQuery({ queryKey: ['experts'], queryFn: () => expertsApi.list(), enabled: isAdmin });
 
     if (isLoadingAuth) return (
