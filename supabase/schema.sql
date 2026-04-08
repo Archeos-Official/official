@@ -185,10 +185,15 @@ CREATE POLICY "All authenticated users can view all profiles"
     ON profiles FOR SELECT
     USING (auth.uid() IS NOT NULL);
 
--- Users can update their own profile
-CREATE POLICY "Users can update their own profile"
+-- Admins can update any profile (including roles)
+CREATE POLICY "Admins can update all profiles"
     ON profiles FOR UPDATE
-    USING (auth.uid() = id);
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
 
 -- Allow insert for authenticated users (needed for trigger)
 CREATE POLICY "Authenticated users can insert profiles"
