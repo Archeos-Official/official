@@ -197,10 +197,10 @@ CREATE POLICY "Users can update their own profile"
     ON profiles FOR UPDATE
     USING (auth.uid() = id);
 
--- Allow insert via trigger (authenticated users can create profiles)
-CREATE POLICY "Users can insert their own profile"
+-- Allow insert for authenticated users (needed for trigger)
+CREATE POLICY "Authenticated users can insert profiles"
     ON profiles FOR INSERT
-    WITH CHECK (auth.uid() = id);
+    WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Functions
 
@@ -273,8 +273,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Check profiles in SQL Editor - run both:
--- SELECT * FROM profiles;
--- SELECT id, email, created_at FROM auth.users;
+-- Check what's in auth.users:
+SELECT id, email, created_at FROM auth.users;
+
+-- Check what's in profiles:
+SELECT * FROM profiles;
 INSERT INTO storage.buckets (id, name, public) VALUES ('discoveries', 'discoveries', true)
 ON CONFLICT (id) DO NOTHING;
