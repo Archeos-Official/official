@@ -197,14 +197,25 @@ CREATE POLICY "Users can update their own profile"
     ON profiles FOR UPDATE
     USING (auth.uid() = id);
 
+-- Allow insert via trigger (authenticated users can create profiles)
+CREATE POLICY "Users can insert their own profile"
+    ON profiles FOR INSERT
+    WITH CHECK (auth.uid() = id);
+
 -- Functions
 
--- Function to handle new user signup
+-- Function to handle new user signup (improved)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+    full_name_text TEXT;
 BEGIN
+    -- Get full_name from metadata, default to email if not provided
+    full_name_text := COALESCE(NEW.raw_user_meta_data->>'full_name', SPLIT_PART(NEW.email, '@', 1));
+    
     INSERT INTO public.profiles (id, email, full_name)
-    VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+    VALUES (NEW.id, NEW.email, full_name_text);
+    
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -214,6 +225,12 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Fix: Create profiles for existing users who don't have one
+INSERT INTO profiles (id, email, full_name)
+SELECT id, email, COALESCE(raw_user_meta_data->>'full_name', SPLIT_PART(email, '@', 1))
+FROM auth.users
+WHERE id NOT IN (SELECT id FROM profiles);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -256,6 +273,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Storage buckets for images
+-- Check profiles in SQL Editor - run both:
+-- SELECT * FROM profiles;
+-- SELECT id, email, created_at FROM auth.users;
 INSERT INTO storage.buckets (id, name, public) VALUES ('discoveries', 'discoveries', true)
 ON CONFLICT (id) DO NOTHING;
