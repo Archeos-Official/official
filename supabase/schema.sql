@@ -87,6 +87,18 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- About Page table (simple content)
+CREATE TABLE IF NOT EXISTS about_page (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    hero_image TEXT,
+    title TEXT,
+    description TEXT,
+    contact_email TEXT,
+    contact_phone TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_projects_created_by ON projects(created_by);
 CREATE INDEX IF NOT EXISTS idx_projects_is_private ON projects(is_private);
@@ -105,6 +117,7 @@ ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE experts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE government_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE about_page ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 -- Public read for non-private projects (for community page)
@@ -200,6 +213,20 @@ CREATE POLICY "Authenticated users can insert profiles"
     ON profiles FOR INSERT
     WITH CHECK (auth.uid() IS NOT NULL);
 
+-- About page: allow anyone to read, only admins can edit
+CREATE POLICY "Anyone can view about page"
+    ON about_page FOR SELECT
+    USING (true);
+
+CREATE POLICY "Admins can update about page"
+    ON about_page FOR ALL
+    USING (
+        EXISTS (
+            SELECT 1 FROM profiles
+            WHERE id = auth.uid() AND role = 'admin'
+        )
+    );
+
 -- Functions
 
 -- Function to handle new user signup (improved)
@@ -271,10 +298,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Check what's in auth.users:
-SELECT id, email, created_at FROM auth.users;
-
--- Check what's in profiles:
-SELECT * FROM profiles;
+-- Storage buckets for images
 INSERT INTO storage.buckets (id, name, public) VALUES ('discoveries', 'discoveries', true)
 ON CONFLICT (id) DO NOTHING;
