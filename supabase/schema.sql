@@ -177,20 +177,13 @@ CREATE POLICY "Anyone can create credit logs"
     ON credit_logs FOR INSERT
     WITH CHECK (true);
 
--- Profiles: users can view their own
-CREATE POLICY "Users can view their own profile"
-    ON profiles FOR SELECT
-    USING (auth.uid() = id);
+-- Profiles: combine all access into one policy
+DROP POLICY IF EXISTS "Users can view their own profile" ON profiles;
+DROP POLICY IF EXISTS "Admins can view all profiles" ON profiles;
 
--- Admins can view all profiles
-CREATE POLICY "Admins can view all profiles"
+CREATE POLICY "All authenticated users can view all profiles"
     ON profiles FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE id = auth.uid() AND role = 'admin'
-        )
-    );
+    USING (auth.uid() IS NOT NULL);
 
 -- Users can update their own profile
 CREATE POLICY "Users can update their own profile"
