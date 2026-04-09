@@ -149,16 +149,7 @@ export default function Login() {
                             <Chrome className="w-4 h-4 mr-2" />
                             Google
                         </Button>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => signInWithMicrosoft()}
-                            disabled={loading}
-                            className={`${darkMode ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border-[#e5b889] text-[#6b5344] hover:bg-[#fdf6ef]'}`}
-                        >
-                            <Mailbox className="w-4 h-4 mr-2" />
-                            Microsoft
-                        </Button>
+                        
                     </div>
                 </div>
 
