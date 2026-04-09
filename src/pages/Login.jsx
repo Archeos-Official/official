@@ -4,11 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from '@/lib/AuthContext';
 import { useLanguage } from '@/components/LanguageContext';
-import { Sparkles, Mail, Lock, User, ArrowLeft, LogIn, UserPlus } from 'lucide-react';
+import { Sparkles, Mail, Lock, User, ArrowLeft, LogIn, UserPlus, Chrome, Mailbox } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Login() {
-    const { signIn, signUp } = useAuth();
+    const { signIn, signUp, signInWithGoogle, signInWithMicrosoft } = useAuth();
     const { t, darkMode } = useLanguage();
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
@@ -127,6 +127,40 @@ export default function Login() {
                         )}
                     </Button>
                 </form>
+
+                <div className="mt-6">
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className={`w-full border-t ${darkMode ? 'border-gray-600' : 'border-[#e5b889]'}`}></div>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                            <span className={`px-2 ${darkMode ? 'bg-gray-800 text-gray-400' : 'bg-[#fdf6ef] text-[#8f7a6a]'}`}>Or continue with</span>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => signInWithGoogle()}
+                            disabled={loading}
+                            className={`${darkMode ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border-[#e5b889] text-[#6b5344] hover:bg-[#fdf6ef]'}`}
+                        >
+                            <Chrome className="w-4 h-4 mr-2" />
+                            Google
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => signInWithMicrosoft()}
+                            disabled={loading}
+                            className={`${darkMode ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600' : 'bg-white border-[#e5b889] text-[#6b5344] hover:bg-[#fdf6ef]'}`}
+                        >
+                            <Mailbox className="w-4 h-4 mr-2" />
+                            Microsoft
+                        </Button>
+                    </div>
+                </div>
 
                 <div className="mt-6 text-center">
                     <button

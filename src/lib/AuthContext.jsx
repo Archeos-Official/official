@@ -126,7 +126,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: 'https://archeosapp.pages.dev'
         }
       });
       if (error) throw error;
@@ -141,7 +141,7 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'azure',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: 'https://archeosapp.pages.dev'
         }
       });
       if (error) throw error;
