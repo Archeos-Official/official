@@ -62,14 +62,22 @@ export default function AboutUs() {
                 .limit(1)
                 .single();
 
+            let error;
             if (existing) {
-                await supabase.from('about_page').update(content).eq('id', existing.id);
+                const result = await supabase.from('about_page').update(content).eq('id', existing.id);
+                error = result.error;
             } else {
-                await supabase.from('about_page').insert(content);
+                const result = await supabase.from('about_page').insert(content);
+                error = result.error;
             }
+            
+            if (error) throw error;
+            
+            await loadContent();
             setIsEditing(false);
         } catch (err) {
             console.error('Error saving:', err);
+            alert('Failed to save: ' + err.message);
         } finally {
             setIsSaving(false);
         }
