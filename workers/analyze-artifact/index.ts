@@ -4,64 +4,31 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-const ACCOUNT_ID = 'a0aea21f8b422b03ea28d79829060046';
-const API_TOKEN = 'cfut_WS2J372BIQpzpCiyTG3gChdyVWnSZ1mozJXp1lz6a754da42';
-
-function extractField(text: string, field: string): string {
-  const regex = new RegExp(`\\*\\*${field}:\\*\\*\\s*(.+?)(?:\\n\\*\\*|$)`, 'i');
-  const match = text.match(regex);
-  return match ? match[1].trim() : '';
+interface Env {
+  AI?: any;
 }
 
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
-async function callAI(prompt: string, image?: string, maxTokens: number = 4096): Promise<string> {
-  const body: any = {
-    stream: false,
-    prompt: prompt,
-    max_tokens: maxTokens
-  };
-  
-  if (image) {
-    body.image = image;
-  }
-  
-  console.log('Calling AI with model:', VISION_MODEL, 'image provided:', !!image);
-  
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${VISION_MODEL}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body)
+async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
+  // Use Cloudflare AI binding if available (no token needed!)
+  if (env?.AI) {
+    console.log('Using env.AI binding (no token needed!)');
+    try {
+      const result = await env.AI.run(VISION_MODEL, {
+        prompt: prompt,
+        image: image,
+        max_tokens: maxTokens
+      });
+      console.log('AI binding succeeded');
+      return result.response || String(result);
+    } catch (e) {
+      console.error('AI binding failed:', e);
     }
-  );
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('AI API error:', response.status, errorText);
-    throw new Error(`AI API error: ${response.status}`);
   }
   
-  const data = await response.json();
-  console.log('AI response structure:', Object.keys(data));
-  
-  if (data.error) {
-    console.error('AI error:', data.error);
-    throw new Error(data.error.message || data.error);
-  }
-  
-  let result = data.result?.response || '';
-  
-  if (typeof result !== 'string') {
-    result = JSON.stringify(result);
-  }
-  
-  console.log('AI raw result length:', result.length);
-  return result;
+console.log('No env.AI binding - returning fallback');
+  return 'AI binding not configured. Please deploy with AI binding.';
 }
 
 export default {
@@ -221,8 +188,8 @@ Provide your response using these exact field names. If you truly cannot identif
     }
     
     console.log('Step 7: AI call complete');
-    console.log('Step 7b: Raw AI response length:', scanResult.length);
-    console.log('Step 7c: Full raw response:', scanResult);
+console.log('Step 7b: Raw AI response length:', scanResult.length);
+    console.log('Step 7c: Full raw response:', scanResult.substring(0, 3000));
     console.log('=== RAW AI RESPONSE END ===');
     
     if (!scanResult || scanResult.length < 10) {
