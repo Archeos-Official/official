@@ -102,12 +102,20 @@ export default {
       }
       
       return handleScan(body);
-    } catch (error) {
-      return new Response(JSON.stringify({ error: String(error) }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders }
-      });
-    }
+} catch (error) {
+    console.error('FINAL ERROR:', error);
+    return new Response(JSON.stringify({ 
+      error: 'Analysis failed: ' + error,
+      debug: {
+        message: String(error),
+        stack: error.stack || 'no stack'
+      }
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
+    });
+  }
+}
   },
 };
 
@@ -165,7 +173,8 @@ async function handleScan(body: any): Promise<Response> {
     }
 
     if (!base64Image) {
-      return new Response(JSON.stringify({ error: 'No image provided' }), {
+      console.log('ERROR: No base64Image generated - returning error');
+      return new Response(JSON.stringify({ error: 'No image provided - image_urls was empty or image fetch failed' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
@@ -200,14 +209,22 @@ Analyze this artifact and provide detailed identification:
 
 Provide your response using these exact field names. If you truly cannot identify the object, say "Unknown object" but still provide the confidence level.`;
 
-    console.log('Step 6: Calling AI model with image base64 (length:', base64Image.length, ')');
-    console.log('Base64 preview:', base64Image.substring(0, 50), '...');
+    let scanResult = '';
+    try {
+      scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
+    } catch (aiError) {
+      console.error('AI CALL FAILED:', aiError);
+      scanResult = 'AI Error: ' + aiError;
+    }
     
-    const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
     console.log('Step 7: AI call complete');
     console.log('=== RAW AI RESPONSE START ===');
     console.log(scanResult);
     console.log('=== RAW AI RESPONSE END ===');
+    
+    if (!scanResult || scanResult.length < 10) {
+      console.log('WARNING: AI returned empty or very short response');
+    }
     
     // Debug: show raw result
     console.log('Raw scan result:', scanResult.substring(0, 500));
