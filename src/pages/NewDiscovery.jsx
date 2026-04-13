@@ -135,28 +135,42 @@ export default function NewDiscovery() {
             }
             setUploads(uploadedUrls);
 
-            setAnalyzeStatus('upload');
+setAnalyzeStatus('upload');
             
             // Small delay then start analysis
-            await new Promise(r => setTimeout(r, 300));
-            setAnalyzeStatus('analyze');
+            await new Promise(r => setTimeout(r, 500));
+            setAnalyzeStatus('ai_initial_scan');
             
             const result = await analyzeArtifact(uploadedUrls, form, language);
             
-            console.log('Analysis result:', result);
+            console.log('Initial Analysis result:', result);
 
             if (form.material && result.identification) {
                 result.identification.material = form.material;
             }
 
+            // Check if we need more processing
+            if (result.identification?.confidence > 60) {
+                setAnalyzeStatus('ai_self_check');
+                // The AI already does self-check in the worker
+                await new Promise(r => setTimeout(r, 500));
+            }
+
             const links = [];
             if (result.is_coin) links.push({ label: 'Duiten.nl – Dutch Coin Reference', url: 'https://www.duiten.nl' });
             if (result.is_pipe) links.push({ label: 'Kleipijpen.nl – Clay Pipe Reference', url: 'https://www.kleipijpen.nl' });
+            // Add research links based on identified type
+            if (result.identification?.name?.toLowerCase().includes('roman')) {
+                links.push({ label: 'Roman Britain Database', url: 'https://roman-britain.org' });
+            }
+            if (result.identification?.name?.toLowerCase().includes('medieval')) {
+                links.push({ label: 'Medieval Archaeology Database', url: 'https://adsabs.harvard.edu' });
+            }
             setReferenceLinks(links);
 
             const archaeological = result.is_archaeological !== false;
             setIsArchaeological(archaeological);
-            
+
             let finalIdentification = result.identification;
             let finalStorage = result.storage_instructions;
             

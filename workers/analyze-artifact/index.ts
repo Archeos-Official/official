@@ -195,38 +195,25 @@ Analyze this artifact and provide detailed identification:
 
 Provide your response using these exact field names. If you truly cannot identify the object, say "Unknown object" but still provide the confidence level.`;
 
+    // Step 1: Initial analysis
     let scanResult = '';
     try {
-      scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000, env);
+      scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 3000, env);
     } catch (aiError) {
       console.error('AI CALL FAILED:', aiError);
       scanResult = 'AI Error: ' + aiError;
     }
     
-    console.log('Step 7: AI call complete');
-console.log('Step 7b: Raw AI response length:', scanResult.length);
-    console.log('Step 7c: Full raw response:', scanResult.substring(0, 3000));
-    console.log('=== RAW AI RESPONSE END ===');
+    console.log('Step 7: Initial AI call complete');
+    console.log('Step 7b: Initial response length:', scanResult.length);
     
-    if (!scanResult || scanResult.length < 10) {
-      console.log('WARNING: AI returned empty or very short response');
-    }
-    
-    // Return something for debugging
-    console.log('DEBUG_AI_RESULT:', scanResult);
-    
-    // Debug: show raw result
-    console.log('Raw scan result:', scanResult.substring(0, 500));
-    
-    // Robust extraction - find text after field name and colon
+    // Extract initial identification
     const extractField = (text: string, field: string, maxLen = 0): string => {
-      // Try various formats: **Name:**, Name:, name:, etc.
       const patterns = [
         new RegExp(`\\*\\*${field}:\\*\\*\\s*(.+?)(?:\\n|$)`, 'i'),
         new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i'),
         new RegExp(`${field}\\.\\s*(.+?)(?:\\n|$)`, 'i'),
       ];
-      
       for (const regex of patterns) {
         const match = text.match(regex);
         if (match && match[1]) {
@@ -238,21 +225,90 @@ console.log('Step 7b: Raw AI response length:', scanResult.length);
       return '';
     };
     
-    let name = extractField(scanResult, 'Name', 100) || extractField(scanResult, 'name', 100) || '';
+    let initialName = extractField(scanResult, 'Name', 100) || '';
+    let initialConfidence = extractField(scanResult, 'Confidence') || '30';
+    let confidence = parseInt(initialConfidence.replace(/\D/g, '')) || 30;
+    
+    // Step 2: Self-Check - verify the identification
+    if (initialName && initialName !== 'Unknown object' && confidence > 40) {
+      console.log('Step 8: Running self-check verification...');
+      const verifyPrompt = `You previously identified this object as "${initialName}" with ${initialConfidence}% confidence.
+      
+      CRITICAL: Double-check this identification. Consider:
+      1. Could it be something else? What are the alternatives?
+      2. Are there any features that contradict your identification?
+      3. What specific details support your identification?
+      
+      Answer in ONE sentence: "Verification: [your verified identification]" or "Verification: UNCERTAIN - [reason]"
+      
+      If uncertain, admit it. Don't force an identification.`;
+      
+      try {
+        const verifyResult = await callAI(verifyPrompt, `data:image/jpeg;base64,${base64Image}`, 800, env);
+        console.log('Verification result:', verifyResult);
+        
+        if (verifyResult.toLowerCase().includes('uncertain')) {
+          console.log('Verification failed - marking as uncertain');
+          confidence = Math.min(confidence, 50);
+        }
+      } catch (e) {
+        console.log('Verification skipped:', e);
+      }
+    }
+    
+    // Step 3: Deep research if confident
+    if (confidence > 60 && initialName) {
+      console.log('Step 9: Running deep research...');
+      const researchPrompt = `You identified this as "${initialName}".
+      
+      Research this type of artifact and provide MORE DETAILED information:
+      1. Exact manufacturing period with dates if possible
+      2. Typical geographic origin/region of manufacture
+      3. Specific use/purpose of this type of object
+      4. Any distinguishing marks or features to look for
+      5. Similar artifacts found in archaeological contexts
+      6. Any cultural or historical significance
+      
+      Be specific and avoid vaguegeneralizations. Give exact terms like "Roman Empire, 1st-2nd century AD" not just "Roman".`;
+      
+      try {
+        const researchResult = await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 1500, env);
+        console.log('Research result length:', researchResult.length);
+        
+        // Merge research into the main result
+        const existingDesc = extractField(scanResult, 'Description', 500);
+        const existingContext = extractField(scanResult, 'Historical Context', 400);
+        const existingSimilar = extractField(scanResult, 'Similar Finds', 300);
+        
+        scanResult = scanResult + '\n\n=== DEEP RESEARCH ===\n' + researchResult;
+      } catch (e) {
+        console.log('Research skipped:', e);
+      }
+    }
+    
+    console.log('Step 10: Final response ready');
+    console.log('=== RAW AI RESPONSE END ===');
+    
+    if (!scanResult || scanResult.length < 10) {
+      console.log('WARNING: AI returned empty or very short response');
+    }
+    
+    // Use the extraction from initial scan
+    let name = extractField(scanResult, 'Name', 100) || extractField(scanResult, 'name', 100) || initialName || '';
     let period = extractField(scanResult, 'Period', 100) || extractField(scanResult, 'period', 100) || 'Unknown period';
     let origin = extractField(scanResult, 'Origin', 100) || extractField(scanResult, 'origin', 100) || 'Unknown origin';
     let extractedMaterial = extractField(scanResult, 'Material', 100) || extractField(scanResult, 'material', 100) || material;
-    let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
+    let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || String(confidence);
     let rarityStr = extractField(scanResult, 'Rarity') || extractField(scanResult, 'rarity') || 'unknown';
     let storage = extractField(scanResult, 'Storage', 150) || extractField(scanResult, 'storage', 150) || 'Store in a dry, cool place.';
     
-    console.log('Extracted - Name:', name, 'Confidence:', confidenceStr);
+    console.log('Final Extracted - Name:', name, 'Confidence:', confidenceStr);
     
-    let confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
+    let confidenceFinal = parseInt(confidenceStr.replace(/\D/g, '')) || confidence;
     
     // If confidence is low, be conservative - override period and origin to Unknown
     // This prevents the AI from making up specific dates/places when unsure
-    if (confidence < 50) {
+    if (confidenceFinal < 50) {
       period = 'Unknown period';
       origin = 'Unknown origin';
     }
@@ -289,7 +345,7 @@ console.log('Step 7b: Raw AI response length:', scanResult.length);
     
     const isCoin = name.toLowerCase().includes('coin');
     const isPipe = name.toLowerCase().includes('pipe');
-    const isArch = !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('modern') && confidence > 20;
+    const isArch = !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('modern') && confidenceFinal > 20;
     
     return new Response(JSON.stringify({
       identification: {
@@ -299,7 +355,7 @@ console.log('Step 7b: Raw AI response length:', scanResult.length);
         material: extractedMaterial || material,
         description: { en: visual },
         historical_context: { en: historicalContext },
-        confidence: confidence,
+        confidence: confidenceFinal,
         rarity: rarity,
         similar_finds: similarFinds,
         reference_links: []
