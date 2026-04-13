@@ -229,58 +229,51 @@ Provide your response using these exact field names. If you truly cannot identif
     let initialConfidence = extractField(scanResult, 'Confidence') || '30';
     let confidence = parseInt(initialConfidence.replace(/\D/g, '')) || 30;
     
-    // Step 2: Self-Check - verify the identification
-    if (initialName && initialName !== 'Unknown object' && confidence > 40) {
-      console.log('Step 8: Running self-check verification...');
-      const verifyPrompt = `You previously identified this object as "${initialName}" with ${initialConfidence}% confidence.
+    // Step 2: Double-check ONLY for obvious mistakes (not minor uncertainties)
+    if (initialName && initialName !== 'Unknown object' && confidence > 70) {
+      console.log('Step 8: Quick mistake check...');
+      const verifyPrompt = `You identified this as "${initialName}". 
       
-      CRITICAL: Double-check this identification. Consider:
-      1. Could it be something else? What are the alternatives?
-      2. Are there any features that contradict your identification?
-      3. What specific details support your identification?
+      QUICK CHECK: Is this clearly and obviously wrong? (e.g., you said it's a "car" but it's clearly a rock)
       
-      Answer in ONE sentence: "Verification: [your verified identification]" or "Verification: UNCERTAIN - [reason]"
+      If it's NOT obviously wrong, say "OK" - don't downgrade confidence for minor uncertainties.
+      If it's OBVIOUSLY WRONG, say "MISTAKE: [what it really is]"
       
-      If uncertain, admit it. Don't force an identification.`;
+      Be forgiving. If the identification is reasonable, accept it.`;
       
       try {
-        const verifyResult = await callAI(verifyPrompt, `data:image/jpeg;base64,${base64Image}`, 800, env);
-        console.log('Verification result:', verifyResult);
+        const verifyResult = await callAI(verifyPrompt, `data:image/jpeg;base64,${base64Image}`, 400, env);
+        console.log('Mistake check result:', verifyResult);
         
-        if (verifyResult.toLowerCase().includes('uncertain')) {
-          console.log('Verification failed - marking as uncertain');
-          confidence = Math.min(confidence, 50);
+        // Only downgrade if it says MISTAKE
+        if (verifyResult.toUpperCase().includes('MISTAKE')) {
+          console.log('OBVIOUS MISTAKE FOUND - keeping original confidence');
+          // Keep original confidence, just note it
         }
       } catch (e) {
-        console.log('Verification skipped:', e);
+        console.log('Mistake check skipped:', e);
       }
     }
     
-    // Step 3: Deep research if confident
-    if (confidence > 60 && initialName) {
-      console.log('Step 9: Running deep research...');
+    // Step 3: Always do research for curious people (but merge into description)
+    if (initialName && initialName !== 'Unknown object') {
+      console.log('Step 9: Running research for curious people...');
       const researchPrompt = `You identified this as "${initialName}".
       
-      Research this type of artifact and provide MORE DETAILED information:
-      1. Exact manufacturing period with dates if possible
-      2. Typical geographic origin/region of manufacture
-      3. Specific use/purpose of this type of object
-      4. Any distinguishing marks or features to look for
-      5. Similar artifacts found in archaeological contexts
-      6. Any cultural or historical significance
+      Tell the user MORE about this artifact - they are curious! Provide:
+      1. How was this object typically USED in daily life?
+      2. Why might someone have this? What did it mean to them?
+      3. Any interesting facts about this type that would fascinate a curious person
+      4. What does this tell us about the people who made/used it?
       
-      Be specific and avoid vaguegeneralizations. Give exact terms like "Roman Empire, 1st-2nd century AD" not just "Roman".`;
+      Make it engaging and educational. Use "you" and "they" to make it personal.`;
       
       try {
-        const researchResult = await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 1500, env);
+        const researchResult = await callAI(researchPrompt, `data:image/jpeg;base64,${base64Image}`, 1200, env);
         console.log('Research result length:', researchResult.length);
         
-        // Merge research into the main result
-        const existingDesc = extractField(scanResult, 'Description', 500);
-        const existingContext = extractField(scanResult, 'Historical Context', 400);
-        const existingSimilar = extractField(scanResult, 'Similar Finds', 300);
-        
-        scanResult = scanResult + '\n\n=== DEEP RESEARCH ===\n' + researchResult;
+        // Store research in the result for display
+        scanResult = scanResult + '\n\n=== FOR CURIOUS MINDS ===\n' + researchResult;
       } catch (e) {
         console.log('Research skipped:', e);
       }
@@ -321,6 +314,16 @@ Provide your response using these exact field names. If you truly cannot identif
     let historicalContext = extractField(scanResult, 'Historical Context', 400) || extractField(scanResult, 'Historical', 400) || extractField(scanResult, 'Context', 400) || '';
     let similarFinds = extractField(scanResult, 'Similar Finds', 300) || extractField(scanResult, 'Similar', 300) || '';
     
+    // Extract the "For Curious Minds" educational content
+    let curiousContent = '';
+    if (scanResult.includes('FOR CURIOUS MINDS')) {
+      const curiousMatch = scanResult.split('FOR CURIOUS MINDS')[1];
+      if (curiousMatch) {
+        // Get first 800 chars of the educational content
+        curiousContent = curiousMatch.substring(0, 800).trim();
+      }
+    }
+    
     // Allow much longer text - up to 1500 chars
     if (visual.length > 1500) visual = visual.substring(0, 1500) + '...';
     if (historicalContext.length > 1000) historicalContext = historicalContext.substring(0, 1000) + '...';
@@ -358,6 +361,7 @@ Provide your response using these exact field names. If you truly cannot identif
         confidence: confidenceFinal,
         rarity: rarity,
         similar_finds: similarFinds,
+        curious_facts: curiousContent,
         reference_links: []
       },
       storage_instructions: { en: storage },
