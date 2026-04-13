@@ -404,7 +404,7 @@ export default function NewDiscovery() {
                                             Het wordt niet zichtbaar in de community en kan niet worden gemeld bij de overheid.
                                         </p>
                                         <p className="text-sm text-orange-700 font-medium">
-                                            Ben je het niet eens? Je kunt na het opslaan een bezwaar indienen bij team ArcheOS.
+                                            Ben je het niet eens? Je kunt na het opslaan een bezwaar indienen bij team Archeos.
                                         </p>
                                     </div>
                                 </div>
