@@ -103,7 +103,7 @@ export default {
       
       return handleScan(body);
 } catch (error) {
-    console.error('FINAL ERROR:', error);
+console.error('FINAL ERROR:', error);
     return new Response(JSON.stringify({ 
       error: 'Analysis failed: ' + error,
       debug: {
@@ -115,8 +115,7 @@ export default {
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
-}
-  },
+  }
 };
 
 async function handleScan(body: any): Promise<Response> {
@@ -136,7 +135,11 @@ async function handleScan(body: any): Promise<Response> {
         const imageUrl = image_urls[0];
         console.log('Step 1: Fetching image from URL:', imageUrl);
         
-        const imgRes = await fetch(imageUrl);
+        const imgRes = await fetch(imageUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          }
+        });
         console.log('Step 2: Image fetch status:', imgRes.status, imgRes.statusText);
         
         if (!imgRes.ok) {
@@ -218,13 +221,16 @@ Provide your response using these exact field names. If you truly cannot identif
     }
     
     console.log('Step 7: AI call complete');
-    console.log('=== RAW AI RESPONSE START ===');
-    console.log(scanResult);
+    console.log('Step 7b: Raw AI response length:', scanResult.length);
+    console.log('Step 7c: Full raw response:', scanResult);
     console.log('=== RAW AI RESPONSE END ===');
     
     if (!scanResult || scanResult.length < 10) {
       console.log('WARNING: AI returned empty or very short response');
     }
+    
+    // Return something for debugging
+    console.log('DEBUG_AI_RESULT:', scanResult);
     
     // Debug: show raw result
     console.log('Raw scan result:', scanResult.substring(0, 500));
