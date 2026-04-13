@@ -11,28 +11,44 @@ interface Env {
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
+  console.log('callAI called, env?.AI:', !!env?.AI, 'image:', !!image);
+  
   // Use Cloudflare AI binding if available (no token needed!)
   if (env?.AI) {
-    console.log('Using env.AI binding (no token needed!)');
+    console.log('Using env.AI binding...');
     try {
-      const result = await env.AI.run(VISION_MODEL, {
+      console.log('Calling AI model:', VISION_MODEL);
+      const result: any = await env.AI.run(VISION_MODEL, {
         prompt: prompt,
         image: image,
         max_tokens: maxTokens
       });
-      console.log('AI binding succeeded');
-      return result.response || String(result);
+      console.log('AI result type:', typeof result);
+      console.log('AI result keys:', result ? Object.keys(result) : 'none');
+      console.log('AI result:', JSON.stringify(result).substring(0, 500));
+      
+      let responseText = result?.response || '';
+      if (!responseText && typeof result === 'string') {
+        responseText = result;
+      }
+      if (!responseText) {
+        responseText = JSON.stringify(result);
+      }
+      console.log('Returning response length:', responseText.length);
+      return responseText;
     } catch (e) {
-      console.error('AI binding failed:', e);
+      console.error('AI binding FAILED:', e);
+      return 'AI Error: ' + e;
     }
+  } else {
+    console.log('NO env.AI binding available!');
   }
   
-console.log('No env.AI binding - returning fallback');
   return 'AI binding not configured. Please deploy with AI binding.';
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     
     if (request.method === 'OPTIONS') {
@@ -57,7 +73,7 @@ export default {
       const { action } = body;
       
       if (action === 'scan' || action === 'identify') {
-        return handleScan(body);
+        return handleScan(body, env);
       }
       
       if (action === 'research') {
@@ -68,7 +84,7 @@ export default {
         return handleTranslate(body);
       }
       
-      return handleScan(body);
+      return handleScan(body, env);
 } catch (error) {
 console.error('FINAL ERROR:', error);
     return new Response(JSON.stringify({ 
@@ -85,7 +101,7 @@ console.error('FINAL ERROR:', error);
   }
 };
 
-async function handleScan(body: any): Promise<Response> {
+async function handleScan(body: any, env?: Env): Promise<Response> {
   try {
     console.log('=== HANDLE SCAN START ===');
     console.log('Full body received:', JSON.stringify(body).substring(0, 500));
@@ -181,7 +197,7 @@ Provide your response using these exact field names. If you truly cannot identif
 
     let scanResult = '';
     try {
-      scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
+      scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000, env);
     } catch (aiError) {
       console.error('AI CALL FAILED:', aiError);
       scanResult = 'AI Error: ' + aiError;
