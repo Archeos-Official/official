@@ -1,12 +1,14 @@
 // ArcheOS Pipeline Types
 // TypeScript definitions for the multi-source artifact recognition system
 
-export type DataSource = 'europeana' | 'pan' | 'local' | 'user';
+export type DataSource = 'europeana' | 'pan' | 'pas' | 'british_museum' | 'met' | 'idai' | 'local' | 'user';
+export type SourceType = 'field_find' | 'museum_reference';
 
 export interface Artifact {
   id: string;
   source: DataSource;
   source_id: string;
+  source_type: SourceType;
   title: string | null;
   description: string | null;
   type: string | null;
@@ -14,10 +16,11 @@ export interface Artifact {
   culture: string | null;
   material: string | null;
   location_found: string | null;
-  image_url: string | null;
+  image_urls: string[];
   thumbnail_url: string | null;
   metadata_raw: Record<string, unknown>;
   embedding_status: 'pending' | 'processing' | 'completed' | 'failed';
+  is_fragment: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +31,17 @@ export interface Embedding {
   embedding: number[];
   model: EmbeddingModel;
   created_at: string;
+}
+
+export interface ImageEmbedding {
+  id: string;
+  artifact_id: string;
+  image_url: string;
+  embedding: number[];
+  model: EmbeddingModel;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  created_at: string;
+  updated_at: string;
 }
 
 export type EmbeddingModel = 'clip' | 'dinov2' | 'sentence-transformers';
@@ -66,8 +80,11 @@ export interface SimilaritySearchResult {
   title: string | null;
   type: string | null;
   period: string | null;
+  source: DataSource | null;
+  source_type: SourceType | null;
   image_url: string | null;
   similarity: number;
+  final_score: number;
 }
 
 export interface SearchQueryRequest {

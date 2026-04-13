@@ -12,8 +12,9 @@ CREATE EXTENSION IF NOT EXISTS "pghttp";
 -- =============================================
 CREATE TABLE IF NOT EXISTS artifacts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    source TEXT NOT NULL CHECK (source IN ('europeana', 'pan', 'local', 'user')),
+    source TEXT NOT NULL CHECK (source IN ('europeana', 'pan', 'pas', 'british_museum', 'met', 'idai', 'local', 'user')),
     source_id TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK (source_type IN ('field_find', 'museum_reference')),
     title TEXT,
     description TEXT,
     type TEXT,
@@ -21,10 +22,11 @@ CREATE TABLE IF NOT EXISTS artifacts (
     culture TEXT,
     material TEXT,
     location_found TEXT,
-    image_url TEXT,
+    image_urls TEXT[] DEFAULT '{}',
     thumbnail_url TEXT,
     metadata_raw JSONB DEFAULT '{}',
     embedding_status TEXT DEFAULT 'pending',
+    is_fragment BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(source, source_id)
@@ -49,9 +51,25 @@ CREATE TABLE IF NOT EXISTS embeddings (
     UNIQUE(artifact_id, model)
 );
 
+-- IMAGE EMBEDDINGS TABLE (one embedding per image)
+CREATE TABLE IF NOT EXISTS image_embeddings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    artifact_id UUID NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL,
+    embedding vector(768),
+    model TEXT NOT NULL CHECK (model IN ('clip', 'dinov2')),
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Index for vector similarity search (cosine distance)
 CREATE INDEX IF NOT EXISTS idx_embeddings_clip_cosine ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE model = 'clip';
 CREATE INDEX IF NOT EXISTS idx_embeddings_dinov2_cosine ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100) WHERE model = 'dinov2';
+
+CREATE INDEX IF NOT EXISTS idx_image_embeddings_artifact ON image_embeddings(artifact_id);
+CREATE INDEX IF NOT EXISTS idx_image_embeddings_status ON image_embeddings(status);
+CREATE INDEX IF NOT EXISTS idx_image_embeddings_model ON image_embeddings(model);
 
 -- =============================================
 -- FEATURES TABLE (normalized key-value attributes for filtering)
@@ -145,6 +163,7 @@ ON CONFLICT (category, raw_value, language) DO NOTHING;
 -- =============================================
 ALTER TABLE artifacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE embeddings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE image_embeddings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE artifact_features ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ingestion_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE normalization_mappings ENABLE ROW LEVEL SECURITY;
@@ -159,6 +178,12 @@ CREATE POLICY "Service can manage artifacts"
 
 CREATE POLICY "Anyone can view embeddings"
     ON embeddings FOR SELECT USING (true);
+
+CREATE POLICY "Anyone can view image_embeddings"
+    ON image_embeddings FOR SELECT USING (true);
+
+CREATE POLICY "Service can manage image_embeddings"
+    ON image_embeddings FOR ALL USING (true);
 
 CREATE POLICY "Anyone can view features"
     ON artifact_features FOR SELECT USING (true);
@@ -177,36 +202,9 @@ CREATE POLICY "Anyone can read mappings"
     ON normalization_mappings FOR SELECT USING (true);
 
 -- =============================================
--- HELPER FUNCTIONS
+-- SEARCH FUNCTION with source type ranking
 -- =============================================
-
--- Normalize a value using mappings
-CREATE OR REPLACE FUNCTION normalize_value(
-    p_category TEXT,
-    p_value TEXT,
-    p_language TEXT DEFAULT 'nl'
-)
-RETURNS TEXT AS $$
-DECLARE
-    v_normalized TEXT;
-BEGIN
-    IF p_value IS NULL OR p_value = '' THEN
-        RETURN p_value;
-    END IF;
-    
-    SELECT nm.normalized_value INTO v_normalized
-    FROM normalization_mappings nm
-    WHERE nm.category = p_category
-      AND LOWER(nm.raw_value) = LOWER(p_value)
-      AND nm.language = p_language
-    LIMIT 1;
-    
-    RETURN COALESCE(v_normalized, p_value);
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
-
--- Search similar artifacts by image embedding (returns top matches)
-CREATE OR REPLACE FUNCTION search_similar_artifacts(
+CREATE OR REPLACE FUNCTION search_by_image(
     p_embedding vector(768),
     p_model TEXT DEFAULT 'clip',
     p_limit INT DEFAULT 10,
@@ -217,8 +215,11 @@ RETURNS TABLE (
     title TEXT,
     type TEXT,
     period TEXT,
+    source TEXT,
+    source_type TEXT,
     image_url TEXT,
-    similarity FLOAT
+    similarity FLOAT,
+    final_score FLOAT
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -227,13 +228,69 @@ BEGIN
         a.title,
         a.type,
         a.period,
-        a.image_url,
-        1 - (e.embedding <=> p_embedding) AS similarity
+        a.source,
+        a.source_type,
+        CASE WHEN array_length(a.image_urls, 1) > 0 THEN a.image_urls[1] ELSE NULL END as image_url,
+        1 - (e.embedding <=> p_embedding) AS similarity,
+        (
+            (1 - (e.embedding <=> p_embedding)) * 0.7 +
+            CASE WHEN a.source_type = 'field_find' THEN 0.2 ELSE 0.0 END +
+            CASE WHEN a.metadata_raw->>'has_metadata' = 'true' THEN 0.1 ELSE 0.0 END
+        ) AS final_score
     FROM embeddings e
     JOIN artifacts a ON a.id = e.artifact_id
     WHERE e.model = p_model
-      AND a.image_url IS NOT NULL
-    ORDER BY e.embedding <=> p_embedding
+      AND a.image_urls IS NOT NULL
+      AND array_length(a.image_urls, 1) > 0
+    ORDER BY 
+        final_score DESC,
+        e.embedding <=> p_embedding
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Search across multiple images per artifact
+CREATE OR REPLACE FUNCTION search_by_image_multi(
+    p_embedding vector(768),
+    p_model TEXT DEFAULT 'clip',
+    p_limit INT DEFAULT 10,
+    p_threshold FLOAT DEFAULT 0.3
+)
+RETURNS TABLE (
+    artifact_id UUID,
+    title TEXT,
+    type TEXT,
+    period TEXT,
+    source TEXT,
+    source_type TEXT,
+    image_url TEXT,
+    similarity FLOAT,
+    final_score FLOAT,
+    image_index INT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        a.id,
+        a.title,
+        a.type,
+        a.period,
+        a.source,
+        a.source_type,
+        ie.image_url,
+        1 - (ie.embedding <=> p_embedding) AS similarity,
+        (
+            (1 - (ie.embedding <=> p_embedding)) * 0.7 +
+            CASE WHEN a.source_type = 'field_find' THEN 0.2 ELSE 0.0 END +
+            CASE WHEN a.metadata_raw->>'has_metadata' = 'true' THEN 0.1 ELSE 0.0 END
+        ) AS final_score,
+        ie.id::text::int as image_index
+    FROM image_embeddings ie
+    JOIN artifacts a ON a.id = ie.artifact_id
+    WHERE ie.model = p_model
+      AND ie.status = 'completed'
+      AND (1 - (ie.embedding <=> p_embedding)) >= p_threshold
+    ORDER BY final_score DESC
     LIMIT p_limit;
 END;
 $$ LANGUAGE plpgsql;

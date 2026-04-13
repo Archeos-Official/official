@@ -67,8 +67,11 @@ async function searchSimilar(
   title: string | null;
   type: string | null;
   period: string | null;
+  source: string | null;
+  source_type: string | null;
   image_url: string | null;
   similarity: number;
+  final_score: number;
 }>> {
   const embeddingStr = `[${embedding.join(',')}]`;
   
@@ -96,7 +99,13 @@ async function searchSimilar(
   }
 
   const data = await response.json();
-  return data || [];
+  
+  const results = data || [];
+  return results.map((r: any) => ({
+    ...r,
+    similarity: r.similarity || 0,
+    final_score: (r.similarity * 0.7) + ((r.source_type === 'field_find') ? 0.2 : 0),
+  }));
 }
 
 async function searchFallback(
@@ -108,8 +117,11 @@ async function searchFallback(
   title: string | null;
   type: string | null;
   period: string | null;
+  source: string | null;
+  source_type: string | null;
   image_url: string | null;
   similarity: number;
+  final_score: number;
 }>> {
   const response = await fetch(
     `${SUPABASE_URL}/rest/v1/embeddings?select=artifact_id,model&model=eq.${model}&limit=100`,
@@ -130,15 +142,18 @@ async function searchFallback(
     title: string | null;
     type: string | null;
     period: string | null;
+    source: string | null;
+    source_type: string | null;
     image_url: string | null;
     similarity: number;
+    final_score: number;
   }> = [];
 
   for (const e of embeddings.slice(0, 20)) {
     const sim = cosineSimilarity(embedding, e.embedding);
     if (sim > 0.3) {
       const artifactRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/artifacts?id=eq.${e.artifact_id}&select=id,title,type,period,image_url`,
+        `${SUPABASE_URL}/rest/v1/artifacts?id=eq.${e.artifact_id}&select=id,title,type,period,source,source_type,image_urls`,
         {
           headers: {
             'Authorization': `Bearer ${SUPABASE_KEY}`,
@@ -147,19 +162,25 @@ async function searchFallback(
       );
       const artifacts = await artifactRes.json();
       if (artifacts && artifacts.length > 0) {
+        const a = artifacts[0];
+        const sourcePriority = a.source_type === 'field_find' ? 0.2 : 0;
+        const finalScore = (sim * 0.7) + sourcePriority;
         bestMatches.push({
           artifact_id: e.artifact_id,
-          title: artifacts[0].title,
-          type: artifacts[0].type,
-          period: artifacts[0].period,
-          image_url: artifacts[0].image_url,
+          title: a.title,
+          type: a.type,
+          period: a.period,
+          source: a.source,
+          source_type: a.source_type,
+          image_url: a.image_urls ? a.image_urls[0] : null,
           similarity: sim,
+          final_score: finalScore,
         });
       }
     }
   }
 
-  return bestMatches.sort((a, b) => b.similarity - a.similarity).slice(0, limit);
+  return bestMatches.sort((a, b) => b.final_score - a.final_score).slice(0, limit);
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
