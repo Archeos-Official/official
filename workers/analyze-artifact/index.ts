@@ -13,6 +13,8 @@ function extractField(text: string, field: string): string {
   return match ? match[1].trim() : '';
 }
 
+const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
+
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096): Promise<string> {
   const body: any = {
     stream: false,
@@ -24,8 +26,10 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096):
     body.image = image;
   }
   
+  console.log('Calling AI with model:', VISION_MODEL, 'image provided:', !!image);
+  
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/@cf/meta/llama-3.2-11b-vision-instruct`,
+    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${VISION_MODEL}`,
     {
       method: 'POST',
       headers: {
@@ -36,13 +40,27 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096):
     }
   );
   
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('AI API error:', response.status, errorText);
+    throw new Error(`AI API error: ${response.status}`);
+  }
+  
   const data = await response.json();
+  console.log('AI response structure:', Object.keys(data));
+  
+  if (data.error) {
+    console.error('AI error:', data.error);
+    throw new Error(data.error.message || data.error);
+  }
+  
   let result = data.result?.response || '';
   
   if (typeof result !== 'string') {
     result = JSON.stringify(result);
   }
   
+  console.log('AI raw result length:', result.length);
   return result;
 }
 
@@ -95,61 +113,121 @@ export default {
 
 async function handleScan(body: any): Promise<Response> {
   try {
+    console.log('=== HANDLE SCAN START ===');
+    console.log('Full body received:', JSON.stringify(body).substring(0, 500));
+    
     const { image_urls, context } = body;
     const material = context?.material || '';
+    console.log('image_urls:', image_urls);
+    console.log('context material:', material);
 
     let base64Image = '';
     
     if (image_urls && image_urls.length > 0) {
       try {
-        const imgRes = await fetch(image_urls[0]);
-        const blob = await imgRes.arrayBuffer();
-        const uint8 = new Uint8Array(blob);
+        const imageUrl = image_urls[0];
+        console.log('Step 1: Fetching image from URL:', imageUrl);
+        
+        const imgRes = await fetch(imageUrl);
+        console.log('Step 2: Image fetch status:', imgRes.status, imgRes.statusText);
+        
+        if (!imgRes.ok) {
+          console.error('Step 2 FAILED: Image fetch failed with status:', imgRes.status);
+          return new Response(JSON.stringify({ error: 'Failed to fetch image: ' + imgRes.status }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+        
+        const blob = await imgRes.blob();
+        console.log('Step 3: Got blob, type:', blob.type, 'size:', blob.size);
+        
+        const arrayBuffer = await blob.arrayBuffer();
+        console.log('Step 4: Got arrayBuffer, length:', arrayBuffer.byteLength);
+        
+        const uint8 = new Uint8Array(arrayBuffer);
         
         let binary = '';
         for (let i = 0; i < uint8.length; i++) {
           binary += String.fromCharCode(uint8[i]);
         }
         base64Image = btoa(binary);
+        console.log('Step 5: Converted to base64, length:', base64Image.length, 'First 100 chars:', base64Image.substring(0, 100));
       } catch (e) {
-        return new Response(JSON.stringify({ error: 'Failed to fetch image' }), {
+        console.error('Step ERROR: Image processing error:', e);
+        return new Response(JSON.stringify({ error: 'Failed to process image: ' + e }), {
           status: 400,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
       }
+    } else {
+      console.log('WARNING: No image_urls provided or empty array');
+    }
+
+    if (!base64Image) {
+      return new Response(JSON.stringify({ error: 'No image provided' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
     }
 
     // ONE STEP: Full identification + research in single AI call
-    const scanPrompt = `You are an expert archaeologist analyzing this find. 
+    const scanPrompt = `You are an expert archaeologist analyzing archaeological finds. 
 
-Look carefully at the OBJECT ONLY - ignore background, case, display.
+Look carefully at the OBJECT in this image. Focus ONLY on the artifact itself - ignore any background, case, display stand, or modern context.
 
-Identify the object AND research its history in ONE response:
+Analyze this artifact and provide detailed identification:
 
-1. Name: [what the object IS - be specific, e.g. "WWII German steel helmet", "Roman bronze coin"]
-2. Period: [specific time period - e.g. "1550-1700 BCE", "1940s WWII", "17th century"]
-3. Origin: [region/country - e.g. "Egypt", "Northern Europe", "Japan"]
-4. Material: [what it's made of - e.g. "steel", "bronze", "ceramic"]
-5. Description: [detailed description - 4-6 sentences]
-6. Historical Context: [2-3 sentences about significance]
-7. Similar Finds: [1-2 sentences about similar artifacts]
-8. Storage: [simple sentence for home storage]
-9. Confidence: [70-95 based on clarity]
-10. Rarity: [common, uncommon, rare, or very_rare based on how common this type is]
+**Name:** [What the object is - be specific, e.g. "Roman bronze fibula", "Medieval copper alloy buckle", "Prehistoric flint arrowhead"]
 
-Be accurate.`;
+**Period:** [The historical time period based on the object's style and features - if uncertain specify "Unknown period"]
 
+**Origin:** [The likely region of manufacture - if uncertain say "Unknown origin"]
+
+**Material:** [What the object is made of based on appearance - bronze, iron, ceramic, glass, stone, etc.]
+
+**Description:** [2-3 sentences describing the object's physical features, size indicators, wear patterns, decoration]
+
+**Historical Context:** [1-2 sentences about the significance of this type of artifact in history]
+
+**Similar Finds:** [Mention any similar known artifacts or leave blank if unknown]
+
+**Storage:** [Brief advice for proper home storage]
+
+**Confidence:** [60-95 if you can identify the object, 20-50 if uncertain]
+
+**Rarity:** [common, uncommon, rare, or very_rare based on how frequently this type is found]
+
+Provide your response using these exact field names. If you truly cannot identify the object, say "Unknown object" but still provide the confidence level.`;
+
+    console.log('Step 6: Calling AI model with image base64 (length:', base64Image.length, ')');
+    console.log('Base64 preview:', base64Image.substring(0, 50), '...');
+    
     const scanResult = await callAI(scanPrompt, `data:image/jpeg;base64,${base64Image}`, 2000);
+    console.log('Step 7: AI call complete');
+    console.log('=== RAW AI RESPONSE START ===');
+    console.log(scanResult);
+    console.log('=== RAW AI RESPONSE END ===');
+    
+    // Debug: show raw result
+    console.log('Raw scan result:', scanResult.substring(0, 500));
     
     // Robust extraction - find text after field name and colon
     const extractField = (text: string, field: string, maxLen = 0): string => {
-      const regex = new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i');
-      const match = text.match(regex);
-      if (match) {
-        // Clean: remove ** prefixes and trim
-        let val = match[1].replace(/^\*+\s*/g, '').replace(/\*+$/g, '').trim();
-        if (maxLen > 0 && val.length > maxLen) val = val.substring(0, maxLen) + '...';
-        return val;
+      // Try various formats: **Name:**, Name:, name:, etc.
+      const patterns = [
+        new RegExp(`\\*\\*${field}:\\*\\*\\s*(.+?)(?:\\n|$)`, 'i'),
+        new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i'),
+        new RegExp(`${field}\\.\\s*(.+?)(?:\\n|$)`, 'i'),
+      ];
+      
+      for (const regex of patterns) {
+        const match = text.match(regex);
+        if (match && match[1]) {
+          let val = match[1].replace(/^\*+\s*/g, '').replace(/\*+$/g, '').trim();
+          if (maxLen > 0 && val.length > maxLen) val = val.substring(0, maxLen) + '...';
+          if (val.length > 0) return val;
+        }
       }
       return '';
     };
@@ -160,14 +238,26 @@ Be accurate.`;
     let extractedMaterial = extractField(scanResult, 'Material', 100) || extractField(scanResult, 'material', 100) || material;
     let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || '30';
     let rarityStr = extractField(scanResult, 'Rarity') || extractField(scanResult, 'rarity') || 'unknown';
-    let storage = extractField(scanResult, 'Storage') || extractField(scanResult, 'storage') || 'Store in a dry, cool place.';
+    let storage = extractField(scanResult, 'Storage', 150) || extractField(scanResult, 'storage', 150) || 'Store in a dry, cool place.';
+    
+    console.log('Extracted - Name:', name, 'Confidence:', confidenceStr);
+    
+    let confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
+    
+    // If confidence is low, be conservative - override period and origin to Unknown
+    // This prevents the AI from making up specific dates/places when unsure
+    if (confidence < 50) {
+      period = 'Unknown period';
+      origin = 'Unknown origin';
+    }
+    
     // Clean up storage - remove any "Next Step:" or similar garbage
     storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
     // Keep full storage text, no truncation
     if (!storage) storage = 'Store in a dry, cool place.';
-    let visual = extractField(scanResult, 'Description') || extractField(scanResult, 'description') || '';
-    let historicalContext = extractField(scanResult, 'Historical Context') || extractField(scanResult, 'Historical') || '';
-    let similarFinds = extractField(scanResult, 'Similar Finds') || extractField(scanResult, 'Similar') || '';
+    let visual = extractField(scanResult, 'Description', 500) || extractField(scanResult, 'description', 500) || '';
+    let historicalContext = extractField(scanResult, 'Historical Context', 400) || extractField(scanResult, 'Historical', 400) || extractField(scanResult, 'Context', 400) || '';
+    let similarFinds = extractField(scanResult, 'Similar Finds', 300) || extractField(scanResult, 'Similar', 300) || '';
     
     // Allow much longer text - up to 1500 chars
     if (visual.length > 1500) visual = visual.substring(0, 1500) + '...';
@@ -183,7 +273,6 @@ Be accurate.`;
     }
     if (!name) name = 'Unknown object';
     
-    const confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 30;
     // Normalize rarity to valid values
     let rarity = 'unknown';
     const rarityLower = rarityStr.toLowerCase();
