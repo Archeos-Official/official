@@ -175,13 +175,15 @@ Analyze this artifact and provide detailed identification:
 
 **Name:** [What the object is - be specific, e.g. "Roman bronze fibula", "Medieval copper alloy buckle", "Prehistoric flint arrowhead"]
 
-**Period:** [The historical time period based on the object's style and features - if uncertain specify "Unknown period"]
+**Period:** [The historical time period - note if this is CONFIRMED, ASSUMED based on style, or UNCERTAIN]
 
-**Origin:** [The likely region of manufacture - if uncertain say "Unknown origin"]
+**Origin:** [The likely region of manufacture - note if CONFIRMED, ASSUMED, or UNCERTAIN]
 
 **Material:** [What the object is made of based on appearance - bronze, iron, ceramic, glass, stone, etc.]
 
 **Description:** [2-3 sentences describing the object's physical features, size indicators, wear patterns, decoration]
+
+**Assumptions:** [What are you ASSUMING? (e.g., "assuming Roman period based on style", "assuming British origin based on find location context") - leave blank if nothing assumed]
 
 **Historical Context:** [1-2 sentences about the significance of this type of artifact in history]
 
@@ -189,7 +191,7 @@ Analyze this artifact and provide detailed identification:
 
 **Storage:** [Brief advice for proper home storage]
 
-**Confidence:** [60-95 if you can identify the object, 20-50 if uncertain]
+**Confidence:** [Your TRUE confidence 10-99 for the object NAME. Be honest - if image is blurry or features unclear, give lower score]
 
 **Rarity:** [common, uncommon, rare, or very_rare based on how frequently this type is found]
 
@@ -291,20 +293,14 @@ Provide your response using these exact field names. If you truly cannot identif
     let period = extractField(scanResult, 'Period', 100) || extractField(scanResult, 'period', 100) || 'Unknown period';
     let origin = extractField(scanResult, 'Origin', 100) || extractField(scanResult, 'origin', 100) || 'Unknown origin';
     let extractedMaterial = extractField(scanResult, 'Material', 100) || extractField(scanResult, 'material', 100) || material;
-    let confidenceStr = extractField(scanResult, 'Confidence') || extractField(scanResult, 'confidence') || String(confidence);
+    // Keep dynamic confidence - don't override
+    let confidenceStr = String(confidence);
     let rarityStr = extractField(scanResult, 'Rarity') || extractField(scanResult, 'rarity') || 'unknown';
     let storage = extractField(scanResult, 'Storage', 150) || extractField(scanResult, 'storage', 150) || 'Store in a dry, cool place.';
     
     console.log('Final Extracted - Name:', name, 'Confidence:', confidenceStr);
     
-    let confidenceFinal = parseInt(confidenceStr.replace(/\D/g, '')) || confidence;
-    
-    // If confidence is low, be conservative - override period and origin to Unknown
-    // This prevents the AI from making up specific dates/places when unsure
-    if (confidenceFinal < 50) {
-      period = 'Unknown period';
-      origin = 'Unknown origin';
-    }
+    let confidenceFinal = confidence;
     
     // Clean up storage - remove any "Next Step:" or similar garbage
     storage = storage.replace(/Next Step:.*/gi, '').replace(/Continue:.*/gi, '').trim();
@@ -313,6 +309,7 @@ Provide your response using these exact field names. If you truly cannot identif
     let visual = extractField(scanResult, 'Description', 500) || extractField(scanResult, 'description', 500) || '';
     let historicalContext = extractField(scanResult, 'Historical Context', 400) || extractField(scanResult, 'Historical', 400) || extractField(scanResult, 'Context', 400) || '';
     let similarFinds = extractField(scanResult, 'Similar Finds', 300) || extractField(scanResult, 'Similar', 300) || '';
+    let assumptions = extractField(scanResult, 'Assumptions', 500) || extractField(scanResult, 'assumptions', 500) || '';
     
     // Extract the "For Curious Minds" educational content
     let curiousContent = '';
@@ -362,6 +359,7 @@ Provide your response using these exact field names. If you truly cannot identif
         rarity: rarity,
         similar_finds: similarFinds,
         curious_facts: curiousContent,
+        assumptions: { en: assumptions },
         reference_links: []
       },
       storage_instructions: { en: storage },

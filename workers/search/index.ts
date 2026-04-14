@@ -4,11 +4,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-const ACCOUNT_ID = 'a0aea21f8b422b03ea28d79829060046';
-const API_TOKEN = 'cfut_WS2J372BIQpzpCiyTG3gChdyVWnSZ1mozJXp1lz6a754da42';
-
 const SUPABASE_URL = 'https://yrffgxgijyhjlknmupko.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kYW1sIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1am1l-fW65CYSW4xjI6N5W8WlCPgpykGNMv5vT4A';
+
+interface Env {
+  AI?: any;
+}
 
 interface SearchRequest {
   image_url?: string;
@@ -29,32 +30,27 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string> {
   return btoa(binary);
 }
 
-async function generateEmbedding(imageBase64: string, model: string): Promise<number[]> {
+async function generateEmbedding(imageBase64: string, model: string, env?: Env): Promise<number[]> {
   let modelName = '@cf/clip/vit-base-patch32';
   
   if (model === 'dinov2') {
     modelName = '@cf/meta/dinov2-base';
   }
 
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${modelName}`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: `data:image/jpeg;base64,${imageBase64}`,
-      }),
+  if (env?.AI) {
+    const result: any = await env.AI.run(modelName, {
+      image: `data:image/jpeg;base64,${imageBase64}`,
+    });
+    if (result && Array.isArray(result)) {
+      return result;
     }
-  );
-
-  const data = await response.json();
-  if (!data.result) {
-    throw new Error('Failed to generate embedding');
+    if (result?.result && Array.isArray(result.result)) {
+      return result.result;
+    }
+    throw new Error('Invalid embedding result from AI');
   }
-  return data.result;
+
+  throw new Error('AI binding not configured');
 }
 
 async function searchSimilar(
@@ -199,7 +195,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env?: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
