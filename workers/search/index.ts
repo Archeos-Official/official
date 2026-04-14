@@ -4,8 +4,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-const SUPABASE_URL = 'https://yrffgxgijyhjlknmupko.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kYW1sIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1am1l-fW65CYSW4xjI6N5W8WlCPgpykGNMv5vT4A';
+const SUPABASE_URL = 'https://kooxgauxbvsontylfoyv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb3hnYXV4YnZzb250eWxmb3l2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMDU1ODMsImV4cCI6MjA5MDc4MTU4M30.wNLv15u2cRVKuGEWbvbD6Ec0AhygxYeEV8jimceGQTA';
 
 interface Env {
   AI?: any;
@@ -248,7 +248,7 @@ export default {
         base64Image = await fetchImageAsBase64(image_url);
       }
 
-      const embedding = await generateEmbedding(base64Image as string, model);
+      const embedding = await generateEmbedding(base64Image as string, model, env);
       const matches = await searchSimilar(embedding, model, limit, threshold);
 
       const searchTime = Date.now() - startTime;

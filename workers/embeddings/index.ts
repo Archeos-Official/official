@@ -4,11 +4,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-const ACCOUNT_ID = 'a0aea21f8b422b03ea28d79829060046';
-const API_TOKEN = 'cfut_WS2J372BIQpzpCiyTG3gChdyVWnSZ1mozJXp1lz6a754da42';
+const SUPABASE_URL = 'https://kooxgauxbvsontylfoyv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtvb3hnYXV4YnZzb250eWxmb3l2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMDU1ODMsImV4cCI6MjA5MDc4MTU4M30.wNLv15u2cRVKuGEWbvbD6Ec0AhygxYeEV8jimceGQTA';
 
-const SUPABASE_URL = 'https://yrffgxgijyhjlknmupko.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kYW1sIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1am1l-fW65CYSW4xjI6N5W8WlCPgpykGNMv5vT4A';
+interface Env {
+  AI?: any;
+}
 
 interface EmbeddingRequest {
   image_url?: string;
@@ -35,48 +36,28 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string> {
   }
 }
 
-async function generateEmbeddingCLIP(imageBase64: string): Promise<number[]> {
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/@cf/clip/vit-base-patch32`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: `data:image/jpeg;base64,${imageBase64}`,
-      }),
-    }
-  );
-
-  const data = await response.json();
-  if (!data.result) {
-    throw new Error('Failed to generate CLIP embedding');
+async function generateEmbeddingCLIP(imageBase64: string, env?: Env): Promise<number[]> {
+  if (env?.AI) {
+    const result: any = await env.AI.run('@cf/clip/vit-base-patch32', {
+      image: `data:image/jpeg;base64,${imageBase64}`,
+    });
+    if (result && Array.isArray(result)) return result;
+    if (result?.result && Array.isArray(result.result)) return result.result;
+    throw new Error('Invalid CLIP embedding result');
   }
-  return data.result;
+  throw new Error('AI binding not configured');
 }
 
-async function generateEmbeddingDINOv2(imageBase64: string): Promise<number[]> {
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/@cf/meta/dinov2-base`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${API_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        image: `data:image/jpeg;base64,${imageBase64}`,
-      }),
-    }
-  );
-
-  const data = await response.json();
-  if (!data.result) {
-    throw new Error('Failed to generate DINOv2 embedding');
+async function generateEmbeddingDINOv2(imageBase64: string, env?: Env): Promise<number[]> {
+  if (env?.AI) {
+    const result: any = await env.AI.run('@cf/meta/dinov2-base', {
+      image: `data:image/jpeg;base64,${imageBase64}`,
+    });
+    if (result && Array.isArray(result)) return result;
+    if (result?.result && Array.isArray(result.result)) return result.result;
+    throw new Error('Invalid DINOv2 embedding result');
   }
-  return data.result;
+  throw new Error('AI binding not configured');
 }
 
 async function storeEmbedding(
@@ -124,7 +105,7 @@ async function updateArtifactStatus(
 }
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env?: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -184,9 +165,9 @@ export default {
           let embedding: number[] | null = null;
 
           if (model === 'clip') {
-            embedding = await generateEmbeddingCLIP(base64Image as string);
+            embedding = await generateEmbeddingCLIP(base64Image as string, env);
           } else if (model === 'dinov2') {
-            embedding = await generateEmbeddingDINOv2(base64Image as string);
+            embedding = await generateEmbeddingDINOv2(base64Image as string, env);
           }
 
           if (embedding) {
