@@ -386,7 +386,7 @@ setAnalyzeStatus('upload');
                         <div className={`mt-4 p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#f4d0a8]/50'}`}>
                             <div className={`flex items-center gap-2 mb-2 ${textClass}`}>
                                 <Database className="w-4 h-4" />
-                                <span className="font-medium text-sm">AI uses Dutch Archeological Databases</span>
+                                <span className="font-medium text-sm">AI uses Archeological Databases</span>
                             </div>
                         </div>
 
