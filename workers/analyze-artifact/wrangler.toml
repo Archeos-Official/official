@@ -5,9 +5,6 @@ compatibility_date = "2024-01-01"
 [observability]
 enabled = true
 
-[ai]
-binding = "AI"
-
 [vars]
 # Your custom backend URL (receives image URLs + metadata)
 BACKEND_URL = "http://localhost:3000"

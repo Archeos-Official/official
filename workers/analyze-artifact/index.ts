@@ -5,7 +5,6 @@ const corsHeaders = {
 };
 
 interface Env {
-  AI?: any;
   BACKEND_URL?: string;
   BACKEND_TYPE?: string;
 }
@@ -193,10 +192,10 @@ function parseTextResponse(text: string): any {
 }
 
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
-  console.log('callAI called, env?.AI:', !!env?.AI, 'image:', !!image);
+  console.log('callAI called, image:', !!image);
   console.log('BACKEND_URL:', env?.BACKEND_URL);
   
-  // Try custom backend first if URL is configured
+  // Send to custom backend - ONE request only
   if (env?.BACKEND_URL) {
     console.log('Using custom backend...');
     try {
@@ -205,42 +204,13 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096, 
       const imageUrls = image ? [image] : [];
       return await callAIBackend(imageUrls, metadata, env);
     } catch (e) {
-      console.error('Backend FAILED, falling back to Cloudflare AI:', e);
+      console.error('Backend FAILED:', e);
+      throw e; // Don't fall back - just fail clearly
     }
   }
   
-  // Fallback to Cloudflare AI binding if available
-  if (env?.AI) {
-    console.log('Using env.AI binding...');
-    try {
-      console.log('Calling AI model:', VISION_MODEL);
-      const result: any = await env.AI.run(VISION_MODEL, {
-        prompt: prompt,
-        image: image,
-        max_tokens: maxTokens
-      });
-      console.log('AI result type:', typeof result);
-      console.log('AI result keys:', result ? Object.keys(result) : 'none');
-      console.log('AI result:', JSON.stringify(result).substring(0, 500));
-      
-      let responseText = result?.response || '';
-      if (!responseText && typeof result === 'string') {
-        responseText = result;
-      }
-      if (!responseText) {
-        responseText = JSON.stringify(result);
-      }
-      console.log('Returning response length:', responseText.length);
-      return responseText;
-    } catch (e) {
-      console.error('AI binding FAILED:', e);
-      return 'AI Error: ' + e;
-    }
-  } else {
-    console.log('NO env.AI binding available!');
-  }
-  
-  return 'No AI backend configured. Please set BACKEND_URL or deploy with AI binding.';
+  // No backend configured
+  return 'No AI backend configured. Please set BACKEND_URL in wrangler.toml';
 }
 
 function extractMetadataFromPrompt(prompt: string): any {
