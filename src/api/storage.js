@@ -43,6 +43,12 @@ export const uploadImage = async (file, userId) => {
     const fileExt = fileToUpload.name.split('.').pop();
     const fileName = `${userId || 'anonymous'}/${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
     
+    console.log('=== F12 DEBUG: Supabase Storage Upload ===');
+    console.log('Bucket:', STORAGE_BUCKET);
+    console.log('File name:', fileName);
+    console.log('File size:', fileToUpload.size);
+    console.log('User ID:', userId || 'anonymous');
+    
     const { data, error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(fileName, fileToUpload, {
@@ -50,11 +56,21 @@ export const uploadImage = async (file, userId) => {
             upsert: false
         });
     
-    if (error) throw error;
+    if (error) {
+        console.error('Supabase upload error:', error);
+        console.error('Error message:', error.message);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw new Error(`Storage upload failed: ${error.message}`);
+    }
+    
+    console.log('Upload success, path:', data.path);
     
     const { data: urlData } = supabase.storage
         .from(STORAGE_BUCKET)
         .getPublicUrl(data.path);
+    
+    console.log('Public URL:', urlData.publicUrl);
+    console.log('=== END DEBUG ===');
     
     const publicUrl = urlData.publicUrl.includes('/public/') 
         ? urlData.publicUrl 
