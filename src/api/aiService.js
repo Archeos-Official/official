@@ -2,6 +2,12 @@
 const AI_WORKER_URL = import.meta.env.VITE_AI_WORKER_URL;
 // @ts-ignore
 const RESEARCH_WORKER_URL = import.meta.env.VITE_RESEARCH_WORKER_URL;
+// @ts-ignore
+const OLLAMA_URL = import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434';
+// @ts-ignore
+const OLLAMA_MODEL = import.meta.env.VITE_OLLAMA_MODEL || 'llama3.2-vision:11b';
+// @ts-ignore
+const USE_OLLAMA = import.meta.env.VITE_USE_OLLAMA === 'true';
 
 const languagePrompts = {
     en: 'Respond in English.',
@@ -11,10 +17,61 @@ const languagePrompts = {
     es: 'Responda en español.'
 };
 
+const callOllama = async (prompt, images = []) => {
+    const messages = [];
+    
+    if (images.length > 0) {
+        messages.push({
+            role: 'user',
+            content: prompt,
+            images: images
+        });
+    } else {
+        messages.push({
+            role: 'user',
+            content: prompt
+        });
+    }
+    
+    const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            messages: messages,
+            stream: false,
+            format: 'json'
+        })
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ollama error: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    return JSON.parse(result.message.content);
+};
+
 export const analyzeArtifact = async (imageUrls, context = {}, language = 'en') => {
     const { depth_found, soil_type, condition, detection_method, material } = context;
 
     try {
+        if (USE_OLLAMA) {
+            console.log('Calling Ollama at:', OLLAMA_URL);
+            
+            const contextText = `Depth found: ${depth_found || 'unknown'}, Soil type: ${soil_type || 'unknown'}, Condition: ${condition || 'unknown'}, Detection method: ${detection_method || 'unknown'}, Material: ${material || 'unknown'}`;
+            
+            const prompt = `Analyze this archaeological artifact image. Context: ${contextText}. ${languagePrompts[language] || languagePrompts.en}
+            
+Return a JSON object with: name, period, origin, material, description, historical_context, similar_finds, confidence`;
+
+            const result = await callOllama(prompt, imageUrls);
+            return result;
+        }
+        
         console.log('Calling AI Worker at:', AI_WORKER_URL);
         console.log('Image URLs:', imageUrls);
         
