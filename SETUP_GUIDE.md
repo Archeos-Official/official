@@ -1,91 +1,23 @@
-# Archeos Setup Guide - Two Versions
+# Archeos Setup Guide - HTTP Version Only
 
 ## Overview
 
-There are now **two ways** to run Archeos with AI:
+Archeos now uses **HTTP requests** to send image URLs + metadata to your backend server.
 
-1. **Localhost Version** - Uses Ollama llava directly on your machine
-2. **HTTP Request Version** - Worker sends HTTP requests to your backend URL
-
----
-
-## Version 1: Localhost with Ollama llava (Simple)
-
-### What it does:
-- Frontend → Cloudflare Worker → Ollama llava (localhost:11434)
-
-### Setup Steps:
-
-#### 1. Install Ollama & llava
-```bash
-# Install from https://ollama.com/
-
-# Pull llava (vision model)
-ollama pull llava
-
-# Start Ollama
-ollama serve
+**Flow:**
 ```
-
-#### 2. Configure Worker
-Edit `workers/analyze-artifact/wrangler.toml`:
-```toml
-[vars]
-BACKEND_URL = "http://localhost:11434"
-BACKEND_TYPE = "ollama"
-USE_CLOUDFLARE_FALLBACK = "false"
-```
-
-#### 3. Start Worker Locally
-```bash
-cd workers/analyze-artifact
-wrangler dev
-```
-
-#### 4. Start Frontend
-```bash
-npm install
-npm run dev
-```
-
-#### 5. Test
-1. Open `http://localhost:5173`
-2. Upload artifact image
-3. Fill context (depth, soil, etc.)
-4. Select location on map
-5. Click "Analyze with AI"
-6. Check **F12 Console** for HTTP request being sent
-7. Check Ollama terminal for incoming requests
-
-#### HTTP Request Flow:
-```
-Frontend → Worker (wrangler dev) → Ollama (localhost:11434)
-```
-
-#### Request Format (Worker → Ollama):
-```json
-POST http://localhost:11434/api/chat
-{
-  "model": "llava",
-  "messages": [{
-    "role": "user",
-    "content": "You are an expert archaeologist...\nContext: Depth found: shallow...",
-    "images": ["https://supabase-url/image.jpg"]
-  }],
-  "stream": false
-}
+Frontend → Cloudflare Worker → Your Backend URL → Ollama (or any AI)
 ```
 
 ---
 
-## Version 2: HTTP Request Version (Custom Backend)
+## Setup: HTTP Version (Custom Backend)
 
 ### What it does:
 - Frontend → Cloudflare Worker → Your Backend URL → Ollama (or any AI)
 
-### Setup Steps:
+### Step 1: Create Your Backend Server
 
-#### 1. Create Your Backend Server
 Create `backend-server.js`:
 
 ```javascript
@@ -123,7 +55,6 @@ app.post('/api/analyze', async (req, res) => {
     if (metadata?.depth_found) contextParts.push(`Depth found: ${metadata.depth_found}`);
     if (metadata?.soil_type) contextParts.push(`Soil type: ${metadata.soil_type}`);
     if (metadata?.latitude) contextParts.push(`Location: ${metadata.latitude}, ${metadata.longitude}`);
-    // ... add more context
     
     const prompt = `You are an expert archaeologist...\nContext: ${contextParts.join(', ')}\n\nAnalyze this artifact...`;
     
@@ -143,8 +74,6 @@ app.post('/api/analyze', async (req, res) => {
     });
     
     const data = await response.json();
-    
-    // Parse and return structured response
     const result = parseResponse(data.message?.content || '');
     res.json(result);
     
@@ -168,22 +97,37 @@ app.listen(3000, () => {
 });
 ```
 
-#### 2. Install Dependencies & Start Backend
+### Step 2: Install Dependencies & Start Backend
+
 ```bash
 npm install express cors node-fetch
 node backend-server.js
 ```
 
-#### 3. Configure Worker
+### Step 3: Install & Start Ollama
+
+```bash
+# Install from https://ollama.com/
+
+# Pull llava (vision model)
+ollama pull llava
+
+# Start Ollama
+ollama serve
+```
+
+### Step 4: Configure Worker
+
 Edit `workers/analyze-artifact/wrangler.toml`:
+
 ```toml
 [vars]
 BACKEND_URL = "http://localhost:3000"
-BACKEND_TYPE = "custom"
 USE_CLOUDFLARE_FALLBACK = "false"
 ```
 
-#### 4. Start Worker & Frontend
+### Step 5: Start Worker & Frontend
+
 ```bash
 # Terminal 1: Start worker
 cd workers/analyze-artifact
@@ -193,12 +137,10 @@ wrangler dev
 npm run dev
 ```
 
-#### HTTP Request Flow:
-```
-Frontend → Worker (wrangler dev) → Your Backend (localhost:3000) → Ollama (localhost:11434)
-```
+### HTTP Request Format:
 
-#### Request Format (Worker → Your Backend):
+#### What the Worker Sends to Your Backend:
+
 ```json
 POST http://localhost:3000/api/analyze
 {
@@ -212,7 +154,8 @@ POST http://localhost:3000/api/analyze
 }
 ```
 
-#### Response Format (Your Backend → Worker):
+#### Response Your Backend Should Return:
+
 ```json
 {
   "name": "Roman bronze fibula",
@@ -229,7 +172,7 @@ POST http://localhost:3000/api/analyze
 
 ---
 
-## How to Host the Website Locally (Both Versions)
+## How to Host the Website Locally
 
 ### Prerequisites:
 ```bash
@@ -242,7 +185,7 @@ npm install
 
 ### Start Local Development:
 ```bash
-# Terminal 1: Start Ollama (both versions need this)
+# Terminal 1: Start Ollama
 ollama serve
 
 # Terminal 2: Start frontend
@@ -261,19 +204,17 @@ Create `.env.local` in root:
 VITE_SUPABASE_URL=https://your-supabase-url.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_AI_WORKER_URL=http://localhost:8787
-VITE_USE_OLLAMA=true
-VITE_OLLAMA_URL=http://localhost:11434
 ```
 
 ---
 
 ## Correct HTTP Handling (Avoid Interference)
 
-### Problem: Multiple requests interfering with each other
+### Problem: Multiple requests interfering with each other.
 
 ### Solution 1: Use Timestamps & Request IDs
+
 ```javascript
-// In your backend server
 app.post('/api/analyze', async (req, res) => {
   const requestId = Date.now(); // Unique ID for this request
   console.log(`[${requestId}] NEW REQUEST`);
@@ -289,9 +230,9 @@ app.post('/api/analyze', async (req, res) => {
 });
 ```
 
-### Solution 2: Use Async Processing
+### Solution 2: Use Async Processing (Queue)
+
 ```javascript
-// Queue requests to avoid interference
 const requestQueue = [];
 let processing = false;
 
@@ -320,6 +261,7 @@ app.post('/api/analyze', (req, res) => {
 ```
 
 ### Solution 3: Log Each Request Separately
+
 ```javascript
 app.post('/api/analyze', async (req, res) => {
   const timestamp = new Date().toISOString();
@@ -338,42 +280,32 @@ app.post('/api/analyze', async (req, res) => {
 
 ## Quick Reference Table
 
-| Aspect | Version 1 (Localhost) | Version 2 (HTTP) |
-|--------|----------------------|-----------------|
-| **Backend** | Ollama directly | Your custom server |
-| **URL** | `localhost:11434` | `localhost:3000` (or your URL) |
-| **Setup** | Simple | More control |
-| **Debugging** | Check Ollama terminal | Check your server logs |
-| **Interference** | Ollama handles it | You control it |
-| **Use Case** | Quick testing | Custom processing |
+| Aspect | HTTP Version |
+|--------|---------------|
+| **Backend** | Your custom server |
+| **URL** | `localhost:3000` (or your URL) |
+| **Setup** | More control |
+| **Debugging** | Check your server logs |
+| **Interference** | You control it |
+| **Use Case** | Custom processing |
 
 ---
 
 ## TODO List for You
 
-### Version 1 (Localhost - Ollama Direct):
-- [ ] Install Ollama from https://ollama.com/
-- [ ] Pull llava: `ollama pull llava`
-- [ ] Start Ollama: `ollama serve`
-- [ ] Update `wrangler.toml` with `BACKEND_URL = "http://localhost:11434"`
-- [ ] Start worker: `cd workers/analyze-artifact && wrangler dev`
-- [ ] Start frontend: `npm run dev`
-- [ ] Test: Upload image → Check F12 console → Check Ollama terminal
-- [ ] Verify HTTP request in F12 console matches expected format
-
-### Version 2 (HTTP Request - Custom Backend):
+### Setup HTTP Version:
 - [ ] Create `backend-server.js` (use template above)
 - [ ] Install dependencies: `npm install express cors node-fetch`
 - [ ] Start Ollama: `ollama serve`
+- [ ] Pull llava: `ollama pull llava`
 - [ ] Start backend: `node backend-server.js`
 - [ ] Update `wrangler.toml` with `BACKEND_URL = "http://localhost:3000"`
 - [ ] Start worker: `cd workers/analyze-artifact && wrangler dev`
 - [ ] Start frontend: `npm run dev`
 - [ ] Test: Upload image → Check backend console → Check Ollama terminal
 - [ ] Verify request/response format matches expected structure
-- [ ] (Optional) Add request IDs/timestamps to avoid interference
 
-### Hosting Website Locally:
+### Host Website Locally:
 - [ ] Install Node.js
 - [ ] Run `npm install` in project root
 - [ ] Create `.env.local` with Supabase credentials

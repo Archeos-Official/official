@@ -5,9 +5,7 @@ const corsHeaders = {
 };
 
 interface Env {
-  AI?: any;
   BACKEND_URL?: string;
-  BACKEND_TYPE?: string;
   USE_CLOUDFLARE_FALLBACK?: string; // 'true' or 'false'
 }
 
@@ -56,51 +54,18 @@ const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
  */
 async function callAIBackend(imageUrls: string[], metadata: any, env?: Env): Promise<string> {
   const backendUrl = env?.BACKEND_URL || 'http://localhost:3000';
-  const backendType = env?.BACKEND_TYPE || 'custom';
   
-  console.log('Calling backend at:', backendUrl, 'type:', backendType);
+  console.log('Calling backend at:', backendUrl);
   console.log('Image URLs:', imageUrls);
   console.log('Metadata:', JSON.stringify(metadata));
   
-  let requestBody: any;
-  let responseParser: (data: any) => string;
-  
-  if (backendType === 'ollama') {
-    // Ollama-style with image URL
-    requestBody = {
-      model: 'llama3.2-vision:11b',
-      prompt: buildPrompt(metadata),
-      images: imageUrls, // Pass URLs directly
-      stream: false,
-      options: {
-        num_predict: 4096
-      }
-    };
-    responseParser = (data: any) => {
-      if (data.message?.content) return data.message.content;
-      if (data.response) return data.response;
-      return JSON.stringify(data);
-    };
-  } else {
-    // Custom backend - send image URLs + metadata
-    requestBody = {
-      image_urls: imageUrls,
-      metadata: metadata,
-      max_tokens: 4096,
-      stream: false
-    };
-    responseParser = (data: any) => {
-      // If response is already structured JSON
-      if (data.name && data.period) {
-        return JSON.stringify(data);
-      }
-      if (data.response) return data.response;
-      if (data.text) return data.text;
-      if (data.output) return data.output;
-      if (typeof data === 'string') return data;
-      return JSON.stringify(data);
-    };
-  }
+  // Custom backend - send image URLs + metadata
+  const requestBody = {
+    image_urls: imageUrls,
+    metadata: metadata,
+    max_tokens: 4096,
+    stream: false
+  };
   
   try {
     const response = await fetch(`${backendUrl}/api/analyze`, {
@@ -118,9 +83,19 @@ async function callAIBackend(imageUrls: string[], metadata: any, env?: Env): Pro
     }
     
     const data = await response.json();
-    const result = responseParser(data);
-    console.log('Backend response length:', result.length);
-    return result;
+    
+    // If response is already structured JSON
+    if (data.name && data.period) {
+      return JSON.stringify(data);
+    }
+    
+    // Otherwise parse text response
+    if (data.response) return data.response;
+    if (data.text) return data.text;
+    if (data.output) return data.output;
+    if (typeof data === 'string') return data;
+    
+    return JSON.stringify(data);
     
   } catch (error) {
     console.error('Backend call failed:', error);
@@ -196,54 +171,20 @@ function parseTextResponse(text: string): any {
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
   console.log('callAI called, image:', !!image);
   console.log('BACKEND_URL:', env?.BACKEND_URL);
-  console.log('USE_CLOUDFLARE_FALLBACK:', env?.USE_CLOUDFLARE_FALLBACK);
   
-  const useCloudfareFallback = env?.USE_CLOUDFLARE_FALLBACK === 'true';
-  
-  // Try custom backend FIRST (if configured and not using Cloudfare fallback)
-  if (env?.BACKEND_URL && !useCloudfareFallback) {
-    console.log('Using custom backend first...');
-    try {
-      const metadata = extractMetadataFromPrompt(prompt);
-      const imageUrls = image ? [image] : [];
-      return await callAIBackend(imageUrls, metadata, env);
-    } catch (e) {
-      console.error('Custom backend FAILED:', e);
-      // If Cloudflare fallback is enabled, try it
-      if (useCloudfareFallback && env?.AI) {
-        console.log('Falling back to Cloudflare AI...');
-      } else {
-        throw e; // No fallback, re-throw
-      }
-    }
+  if (!env?.BACKEND_URL) {
+    throw new Error('No BACKEND_URL configured in wrangler.toml');
   }
   
-  // Use Cloudflare AI (either as primary or fallback)
-  if (env?.AI) {
-    console.log('Using Cloudflare AI...');
-    try {
-      console.log('Calling AI model:', VISION_MODEL);
-      const result: any = await env.AI.run(VISION_MODEL, {
-        prompt: prompt,
-        image: image,
-        max_tokens: maxTokens
-      });
-      
-      let responseText = result?.response || '';
-      if (!responseText && typeof result === 'string') {
-        responseText = result;
-      }
-      if (!responseText) {
-        responseText = JSON.stringify(result);
-      }
-      return responseText;
-    } catch (e) {
-      console.error('Cloudflare AI FAILED:', e);
-      throw e;
-    }
+  console.log('Using custom backend...');
+  try {
+    const metadata = extractMetadataFromPrompt(prompt);
+    const imageUrls = image ? [image] : [];
+    return await callAIBackend(imageUrls, metadata, env);
+  } catch (e) {
+    console.error('Backend FAILED:', e);
+    throw e;
   }
-  
-  throw new Error('No AI backend configured. Set BACKEND_URL or deploy with AI binding.');
 }
 
 function extractMetadataFromPrompt(prompt: string): any {
