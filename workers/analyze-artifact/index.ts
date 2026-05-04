@@ -6,14 +6,126 @@ const corsHeaders = {
 
 interface Env {
   AI?: any;
+  BACKEND_URL?: string;
+  BACKEND_TYPE?: string;
 }
 
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
+/**
+ * Sends request to custom backend server
+ * 
+ * EXPECTED BACKEND REQUEST FORMAT:
+ * POST to your backend URL with JSON body:
+ * {
+ *   "model": "llama3.2-vision:11b",  // or your model name
+ *   "prompt": "Your prompt text here",
+ *   "images": ["base64-encoded-image-string"],  // array of base64 images (without data:image prefix)
+ *   "max_tokens": 4096,
+ *   "stream": false,
+ *   "format": "json"  // optional: if you want JSON response
+ * }
+ * 
+ * EXPECTED BACKEND RESPONSE FORMAT:
+ * {
+ *   "response": "The AI generated text response"
+ * }
+ * OR for Ollama-style:
+ * {
+ *   "message": {
+ *     "content": "The AI generated text response"
+ *   }
+ * }
+ */
+async function callAIBackend(prompt: string, imageBase64: string, maxTokens: number = 4096, env?: Env): Promise<string> {
+  const backendUrl = env?.BACKEND_URL || 'http://localhost:11434';
+  const backendType = env?.BACKEND_TYPE || 'ollama'; // 'ollama' or 'custom'
+  
+  console.log('Calling backend at:', backendUrl, 'type:', backendType);
+  
+  // Strip data:image prefix if present
+  const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  
+  let requestBody: any;
+  let responseParser: (data: any) => string;
+  
+  if (backendType === 'ollama') {
+    // Ollama API format
+    requestBody = {
+      model: 'llama3.2-vision:11b',
+      messages: [{
+        role: 'user',
+        content: prompt,
+        images: [cleanBase64]
+      }],
+      stream: false,
+      options: {
+        num_predict: maxTokens
+      }
+    };
+    responseParser = (data: any) => {
+      if (data.message?.content) return data.message.content;
+      if (data.response) return data.response;
+      return JSON.stringify(data);
+    };
+  } else {
+    // Custom backend format
+    requestBody = {
+      prompt: prompt,
+      image: cleanBase64,
+      max_tokens: maxTokens,
+      stream: false
+    };
+    responseParser = (data: any) => {
+      if (data.response) return data.response;
+      if (data.text) return data.text;
+      if (data.output) return data.output;
+      if (typeof data === 'string') return data;
+      return JSON.stringify(data);
+    };
+  }
+  
+  try {
+    const response = await fetch(`${backendUrl}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Backend error:', response.status, errorText);
+      throw new Error(`Backend request failed: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    const result = responseParser(data);
+    console.log('Backend response length:', result.length);
+    return result;
+    
+  } catch (error) {
+    console.error('Backend call failed:', error);
+    throw error;
+  }
+}
+
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
   console.log('callAI called, env?.AI:', !!env?.AI, 'image:', !!image);
+  console.log('BACKEND_URL:', env?.BACKEND_URL);
   
-  // Use Cloudflare AI binding if available (no token needed!)
+  // Try custom backend first if URL is configured
+  if (env?.BACKEND_URL) {
+    console.log('Using custom backend...');
+    try {
+      return await callAIBackend(prompt, image || '', maxTokens, env);
+    } catch (e) {
+      console.error('Backend FAILED, falling back to Cloudflare AI:', e);
+    }
+  }
+  
+  // Fallback to Cloudflare AI binding if available
   if (env?.AI) {
     console.log('Using env.AI binding...');
     try {
@@ -44,7 +156,7 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096, 
     console.log('NO env.AI binding available!');
   }
   
-  return 'AI binding not configured. Please deploy with AI binding.';
+  return 'No AI backend configured. Please set BACKEND_URL or deploy with AI binding.';
 }
 
 export default {

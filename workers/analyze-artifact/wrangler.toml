@@ -7,3 +7,7 @@ enabled = true
 
 [ai]
 binding = "AI"
+
+[vars]
+BACKEND_URL = "http://localhost:11434"
+BACKEND_TYPE = "ollama"
