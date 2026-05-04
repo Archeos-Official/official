@@ -9,5 +9,7 @@ enabled = true
 binding = "AI"
 
 [vars]
-BACKEND_URL = "http://localhost:11434"
-BACKEND_TYPE = "ollama"
+# Your custom backend URL (receives image URLs + metadata)
+BACKEND_URL = "http://localhost:3000"
+# Backend type: "custom" for your own API, "ollama" for Ollama direct
+BACKEND_TYPE = "custom"

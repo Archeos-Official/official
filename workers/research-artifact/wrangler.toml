@@ -1,3 +1,7 @@
 name = "research-artifact"
 main = "index.ts"
 compatibility_date = "2026-04-04"
+
+[vars]
+BACKEND_URL = "http://localhost:3000"
+BACKEND_TYPE = "custom"
