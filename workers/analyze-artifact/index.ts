@@ -108,8 +108,11 @@ async function handleScan(body: any, env?: Env): Promise<Response> {
     
     const { image_urls, context } = body;
     const material = context?.material || '';
+    const latitude = context?.latitude;
+    const longitude = context?.longitude;
     console.log('image_urls:', image_urls);
     console.log('context material:', material);
+    console.log('context location:', latitude, longitude);
 
     let base64Image = '';
     
@@ -167,9 +170,12 @@ async function handleScan(body: any, env?: Env): Promise<Response> {
     }
 
     // ONE STEP: Full identification + research in single AI call
+    const locationContext = (latitude && longitude) ? `\n\nIMPORTANT - Find location: Latitude ${latitude}, Longitude ${longitude}. Consider what archaeological periods and cultures are known from this region.` : '';
+    
     const scanPrompt = `You are an expert archaeologist analyzing archaeological finds. 
-
+    
 Look carefully at the OBJECT in this image. Focus ONLY on the artifact itself - ignore any background, case, display stand, or modern context.
+${locationContext}
 
 Analyze this artifact and provide detailed identification:
 

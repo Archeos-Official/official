@@ -56,13 +56,13 @@ const callOllama = async (prompt, images = []) => {
 };
 
 export const analyzeArtifact = async (imageUrls, context = {}, language = 'en') => {
-    const { depth_found, soil_type, condition, detection_method, material } = context;
+    const { depth_found, soil_type, condition, detection_method, material, latitude, longitude } = context;
 
     try {
         if (USE_OLLAMA) {
             console.log('Calling Ollama at:', OLLAMA_URL);
             
-            const contextText = `Depth found: ${depth_found || 'unknown'}, Soil type: ${soil_type || 'unknown'}, Condition: ${condition || 'unknown'}, Detection method: ${detection_method || 'unknown'}, Material: ${material || 'unknown'}`;
+            const contextText = `Depth found: ${depth_found || 'unknown'}, Soil type: ${soil_type || 'unknown'}, Condition: ${condition || 'unknown'}, Detection method: ${detection_method || 'unknown'}, Material: ${material || 'unknown'}${latitude && longitude ? `, Location: ${latitude}, ${longitude}` : ''}`;
             
             const prompt = `Analyze this archaeological artifact image. Context: ${contextText}. ${languagePrompts[language] || languagePrompts.en}
             
@@ -82,7 +82,7 @@ Return a JSON object with: name, period, origin, material, description, historic
             },
             body: JSON.stringify({
                 image_urls: imageUrls,
-                context: { depth_found, soil_type, condition, detection_method, material },
+                context: { depth_found, soil_type, condition, detection_method, material, latitude, longitude },
                 action: 'scan'
             })
         });

@@ -141,7 +141,11 @@ setAnalyzeStatus('upload');
             await new Promise(r => setTimeout(r, 500));
             setAnalyzeStatus('ai_initial_scan');
             
-            const result = await analyzeArtifact(uploadedUrls, form, language);
+            const result = await analyzeArtifact(uploadedUrls, {
+                ...form,
+                latitude: location?.lat,
+                longitude: location?.lng
+            }, language);
             
             console.log('Initial Analysis result:', result);
 
@@ -383,6 +387,22 @@ setAnalyzeStatus('upload');
                             </div>
                         </div>
 
+                        <Card className={`mt-6 p-6 ${cardClass}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className={`text-xl font-semibold flex items-center gap-2 ${textClass}`}>
+                                    <MapPin className="w-5 h-5 text-[#b66c34]" />
+                                    {t('markLocation')}
+                                </h3>
+                                <Button variant="outline" size="sm" onClick={getCurrentLocation} disabled={gettingLocation} className={`rounded-xl ${darkMode ? 'border-gray-600 text-white' : 'border-[#b66c34] text-[#b66c34]'}`}>
+                                    {gettingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4 mr-1" />}
+                                    GPS
+                                </Button>
+                            </div>
+                            <p className={`text-sm mb-4 ${mutedClass}`}>{t('clickMap')}</p>
+                            <DiscoveryMap onLocationSelect={handleLocationSelect} selectedPosition={location ? [location.lat, location.lng] : null} height="350px" />
+                            {location && <p className={`text-sm mt-2 ${mutedClass}`}>Selected: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}</p>}
+                        </Card>
+
                         <div className={`mt-4 p-4 rounded-xl ${darkMode ? 'bg-gray-700' : 'bg-[#f4d0a8]/50'}`}>
                             <div className={`flex items-center gap-2 mb-2 ${textClass}`}>
                                 <Database className="w-4 h-4" />
@@ -446,21 +466,14 @@ setAnalyzeStatus('upload');
                             </Card>
                         )}
 
-                        <Card className={`p-6 ${cardClass}`}>
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className={`text-xl font-semibold flex items-center gap-2 ${textClass}`}>
-                                    <MapPin className="w-5 h-5 text-[#b66c34]" />
-                                    {t('markLocation')}
-                                </h2>
-                                <Button variant="outline" size="sm" onClick={getCurrentLocation} disabled={gettingLocation} className={`rounded-xl ${darkMode ? 'border-gray-600 text-white' : 'border-[#b66c34] text-[#b66c34]'}`}>
-                                    {gettingLocation ? <Loader2 className="w-4 h-4 animate-spin" /> : <Navigation className="w-4 h-4 mr-1" />}
-                                    GPS
-                                </Button>
-                            </div>
-                            <p className={`text-sm mb-4 ${mutedClass}`}>{t('clickMap')}</p>
-                            <DiscoveryMap onLocationSelect={handleLocationSelect} selectedPosition={location ? [location.lat, location.lng] : null} height="350px" />
-                            {location && <p className={`text-sm mt-2 ${mutedClass}`}>Selected: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}</p>}
-                        </Card>
+                        {location && (
+                            <Card className={`p-4 ${cardClass}`}>
+                                <p className={`text-sm ${mutedClass}`}>
+                                    <MapPin className="w-4 h-4 inline mr-1" />
+                                    Location: {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
+                                </p>
+                            </Card>
+                        )}
 
                         <div className="flex gap-4">
                             <Button variant="outline" onClick={() => setStep(1)} className={`flex-1 rounded-xl ${darkMode ? 'border-gray-600 text-white' : 'border-[#b66c34] text-[#b66c34]'}`}>
