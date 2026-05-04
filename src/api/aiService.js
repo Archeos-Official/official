@@ -33,17 +33,26 @@ const callOllama = async (prompt, images = []) => {
         });
     }
     
+    const requestBody = {
+        model: OLLAMA_MODEL,
+        messages: messages,
+        stream: false,
+        format: 'json'
+    };
+    
+    console.log('=== F12 DEBUG: HTTP Request to Ollama ===');
+    console.log('URL:', `${OLLAMA_URL}/api/chat`);
+    console.log('Method: POST');
+    console.log('Headers:', { 'Content-Type': 'application/json' });
+    console.log('Body:', JSON.stringify(requestBody, null, 2));
+    console.log('=== END DEBUG ===');
+    
     const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-            model: OLLAMA_MODEL,
-            messages: messages,
-            stream: false,
-            format: 'json'
-        })
+        body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
@@ -68,6 +77,26 @@ export const analyzeArtifact = async (imageUrls, context = {}, language = 'en') 
             
 Return a JSON object with: name, period, origin, material, description, historical_context, similar_finds, confidence`;
 
+            const messages = [{
+                role: 'user',
+                content: prompt,
+                images: imageUrls
+            }];
+            
+            const requestBody = {
+                model: OLLAMA_MODEL,
+                messages: messages,
+                stream: false,
+                format: 'json'
+            };
+            
+            console.log('=== F12 DEBUG: HTTP Request to Ollama ===');
+            console.log('URL:', `${OLLAMA_URL}/api/chat`);
+            console.log('Method: POST');
+            console.log('Headers:', { 'Content-Type': 'application/json' });
+            console.log('Body:', JSON.stringify(requestBody, null, 2));
+            console.log('=== END DEBUG ===');
+            
             const result = await callOllama(prompt, imageUrls);
             return result;
         }
@@ -75,16 +104,25 @@ Return a JSON object with: name, period, origin, material, description, historic
         console.log('Calling AI Worker at:', AI_WORKER_URL);
         console.log('Image URLs:', imageUrls);
         
+        const requestBody = {
+            image_urls: imageUrls,
+            context: { depth_found, soil_type, condition, detection_method, material, latitude, longitude },
+            action: 'scan'
+        };
+        
+        console.log('=== F12 DEBUG: HTTP Request to AI Worker ===');
+        console.log('URL:', AI_WORKER_URL);
+        console.log('Method: POST');
+        console.log('Headers:', { 'Content-Type': 'application/json' });
+        console.log('Body:', JSON.stringify(requestBody, null, 2));
+        console.log('=== END DEBUG ===');
+        
         const response = await fetch(AI_WORKER_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                image_urls: imageUrls,
-                context: { depth_found, soil_type, condition, detection_method, material, latitude, longitude },
-                action: 'scan'
-            })
+            body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {

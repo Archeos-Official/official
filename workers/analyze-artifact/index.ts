@@ -13,54 +13,66 @@ interface Env {
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 
 /**
- * Sends request to custom backend server
+ * Sends request to custom backend server with image URL and metadata
  * 
  * EXPECTED BACKEND REQUEST FORMAT:
  * POST to your backend URL with JSON body:
  * {
- *   "model": "llama3.2-vision:11b",  // or your model name
- *   "prompt": "Your prompt text here",
- *   "images": ["base64-encoded-image-string"],  // array of base64 images (without data:image prefix)
- *   "max_tokens": 4096,
- *   "stream": false,
- *   "format": "json"  // optional: if you want JSON response
+ *   "image_urls": ["https://supabase-url/image.jpg"],
+ *   "metadata": {
+ *     "depth_found": "shallow",
+ *     "soil_type": "sandy", 
+ *     "condition": "good",
+ *     "detection_method": "metal_detector",
+ *     "material": "bronze",
+ *     "latitude": 52.3676,
+ *     "longitude": 4.9041
+ *   }
  * }
  * 
  * EXPECTED BACKEND RESPONSE FORMAT:
  * {
  *   "response": "The AI generated text response"
  * }
- * OR for Ollama-style:
+ * OR in Ollama-style:
  * {
  *   "message": {
  *     "content": "The AI generated text response"
  *   }
  * }
+ * OR structured JSON:
+ * {
+ *   "name": "Roman bronze fibula",
+ *   "period": "1st-3rd century AD",
+ *   "origin": "Roman Empire",
+ *   "material": "bronze",
+ *   "description": "...",
+ *   "historical_context": "...",
+ *   "similar_finds": "...",
+ *   "confidence": 85,
+ *   "rarity": "uncommon"
+ * }
  */
-async function callAIBackend(prompt: string, imageBase64: string, maxTokens: number = 4096, env?: Env): Promise<string> {
-  const backendUrl = env?.BACKEND_URL || 'http://localhost:11434';
-  const backendType = env?.BACKEND_TYPE || 'ollama'; // 'ollama' or 'custom'
+async function callAIBackend(imageUrls: string[], metadata: any, env?: Env): Promise<string> {
+  const backendUrl = env?.BACKEND_URL || 'http://localhost:3000';
+  const backendType = env?.BACKEND_TYPE || 'custom';
   
   console.log('Calling backend at:', backendUrl, 'type:', backendType);
-  
-  // Strip data:image prefix if present
-  const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+  console.log('Image URLs:', imageUrls);
+  console.log('Metadata:', JSON.stringify(metadata));
   
   let requestBody: any;
   let responseParser: (data: any) => string;
   
   if (backendType === 'ollama') {
-    // Ollama API format
+    // Ollama-style with image URL
     requestBody = {
       model: 'llama3.2-vision:11b',
-      messages: [{
-        role: 'user',
-        content: prompt,
-        images: [cleanBase64]
-      }],
+      prompt: buildPrompt(metadata),
+      images: imageUrls, // Pass URLs directly
       stream: false,
       options: {
-        num_predict: maxTokens
+        num_predict: 4096
       }
     };
     responseParser = (data: any) => {
@@ -69,14 +81,18 @@ async function callAIBackend(prompt: string, imageBase64: string, maxTokens: num
       return JSON.stringify(data);
     };
   } else {
-    // Custom backend format
+    // Custom backend - send image URLs + metadata
     requestBody = {
-      prompt: prompt,
-      image: cleanBase64,
-      max_tokens: maxTokens,
+      image_urls: imageUrls,
+      metadata: metadata,
+      max_tokens: 4096,
       stream: false
     };
     responseParser = (data: any) => {
+      // If response is already structured JSON
+      if (data.name && data.period) {
+        return JSON.stringify(data);
+      }
       if (data.response) return data.response;
       if (data.text) return data.text;
       if (data.output) return data.output;
@@ -86,7 +102,7 @@ async function callAIBackend(prompt: string, imageBase64: string, maxTokens: num
   }
   
   try {
-    const response = await fetch(`${backendUrl}/api/chat`, {
+    const response = await fetch(`${backendUrl}/api/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -111,6 +127,71 @@ async function callAIBackend(prompt: string, imageBase64: string, maxTokens: num
   }
 }
 
+function buildPrompt(metadata: any): string {
+  const contextParts: string[] = [];
+  
+  if (metadata.depth_found) contextParts.push(`Depth found: ${metadata.depth_found}`);
+  if (metadata.soil_type) contextParts.push(`Soil type: ${metadata.soil_type}`);
+  if (metadata.condition) contextParts.push(`Condition: ${metadata.condition}`);
+  if (metadata.detection_method) contextParts.push(`Detection method: ${metadata.detection_method}`);
+  if (metadata.material) contextParts.push(`Material: ${metadata.material}`);
+  if (metadata.latitude && metadata.longitude) {
+    contextParts.push(`Location: Lat ${metadata.latitude}, Lng ${metadata.longitude}`);
+  }
+  
+  const contextText = contextParts.length > 0 ? contextParts.join(', ') : 'No context provided';
+  
+  return `You are an expert archaeologist analyzing archaeological finds.
+
+Context: ${contextText}
+
+Analyze this artifact and provide detailed identification using these fields:
+**Name:** [Specific identification]
+**Period:** [Time period]
+**Origin:** [Region of origin]
+**Material:** [What it's made of]
+**Description:** [2-3 sentences]
+**Historical Context:** [Historical significance]
+**Similar Finds:** [Similar known artifacts]
+**Confidence:** [0-99]
+**Rarity:** [common/uncommon/rare]
+
+Provide your response using these exact field names.`;
+}
+
+function parseTextResponse(text: string): any {
+  const result: any = {};
+  
+  const extractField = (field: string): string => {
+    const patterns = [
+      new RegExp(`\\*\\*${field}:\\*\\*\\s*(.+?)(?:\\n|$)`, 'i'),
+      new RegExp(`${field}:\\s*(.+?)(?:\\n|$)`, 'i'),
+    ];
+    for (const regex of patterns) {
+      const match = text.match(regex);
+      if (match && match[1]) {
+        return match[1].replace(/^\*+\s*/g, '').replace(/\*+$/g, '').trim();
+      }
+    }
+    return '';
+  };
+  
+  result.name = extractField('Name');
+  result.period = extractField('Period');
+  result.origin = extractField('Origin');
+  result.material = extractField('Material');
+  result.description = extractField('Description');
+  result.historical_context = extractField('Historical Context');
+  result.similar_finds = extractField('Similar Finds');
+  
+  const confidenceStr = extractField('Confidence');
+  result.confidence = parseInt(confidenceStr.replace(/\D/g, '')) || 50;
+  
+  result.rarity = extractField('Rarity');
+  
+  return result;
+}
+
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
   console.log('callAI called, env?.AI:', !!env?.AI, 'image:', !!image);
   console.log('BACKEND_URL:', env?.BACKEND_URL);
@@ -119,7 +200,10 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096, 
   if (env?.BACKEND_URL) {
     console.log('Using custom backend...');
     try {
-      return await callAIBackend(prompt, image || '', maxTokens, env);
+      // Build metadata from prompt (extract context)
+      const metadata = extractMetadataFromPrompt(prompt);
+      const imageUrls = image ? [image] : [];
+      return await callAIBackend(imageUrls, metadata, env);
     } catch (e) {
       console.error('Backend FAILED, falling back to Cloudflare AI:', e);
     }
@@ -157,6 +241,41 @@ async function callAI(prompt: string, image?: string, maxTokens: number = 4096, 
   }
   
   return 'No AI backend configured. Please set BACKEND_URL or deploy with AI binding.';
+}
+
+function extractMetadataFromPrompt(prompt: string): any {
+  const metadata: any = {};
+  
+  // Extract context from prompt
+  if (prompt.includes('Depth found:')) {
+    const match = prompt.match(/Depth found:\s*([^,]+)/);
+    if (match) metadata.depth_found = match[1].trim();
+  }
+  if (prompt.includes('Soil type:')) {
+    const match = prompt.match(/Soil type:\s*([^,]+)/);
+    if (match) metadata.soil_type = match[1].trim();
+  }
+  if (prompt.includes('Condition:')) {
+    const match = prompt.match(/Condition:\s*([^,]+)/);
+    if (match) metadata.condition = match[1].trim();
+  }
+  if (prompt.includes('Detection method:')) {
+    const match = prompt.match(/Detection method:\s*([^,]+)/);
+    if (match) metadata.detection_method = match[1].trim();
+  }
+  if (prompt.includes('Material:')) {
+    const match = prompt.match(/Material:\s*([^,]+)/);
+    if (match) metadata.material = match[1].trim();
+  }
+  if (prompt.includes('Lat')) {
+    const match = prompt.match(/Lat\s*([\d.-]+),\s*Lng\s*([\d.-]+)/);
+    if (match) {
+      metadata.latitude = parseFloat(match[1]);
+      metadata.longitude = parseFloat(match[2]);
+    }
+  }
+  
+  return metadata;
 }
 
 export default {
@@ -225,7 +344,57 @@ async function handleScan(body: any, env?: Env): Promise<Response> {
     console.log('image_urls:', image_urls);
     console.log('context material:', material);
     console.log('context location:', latitude, longitude);
-
+    
+    // If backend URL is configured, send image URLs and metadata directly
+    if (env?.BACKEND_URL) {
+      console.log('Using backend, sending image URLs and metadata...');
+      try {
+        const metadata = {
+          depth_found: context?.depth_found || '',
+          soil_type: context?.soil_type || '',
+          condition: context?.condition || '',
+          detection_method: context?.detection_method || '',
+          material: material,
+          latitude: latitude,
+          longitude: longitude
+        };
+        
+        const result = await callAIBackend(image_urls || [], metadata, env);
+        
+        // Parse the result and return structured response
+        let parsedResult: any = {};
+        try {
+          // Try to parse as JSON
+          parsedResult = JSON.parse(result);
+        } catch {
+          // If not JSON, extract fields from text
+          parsedResult = parseTextResponse(result);
+        }
+        
+        return new Response(JSON.stringify({
+          identification: {
+            name: parsedResult.name || 'Unknown',
+            period: parsedResult.period || 'Unknown',
+            origin: parsedResult.origin || 'Unknown',
+            material: parsedResult.material || material || 'Unknown',
+            description: { en: parsedResult.description || result },
+            historical_context: { en: parsedResult.historical_context || '' },
+            similar_finds: parsedResult.similar_finds || ''
+          },
+          storage_instructions: { en: parsedResult.storage || '' },
+          is_archaeological: !parsedResult.name?.toLowerCase().includes('not archaeological'),
+          confidence: parsedResult.confidence || 50
+        }), {
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+        
+      } catch (backendError) {
+        console.error('Backend failed, falling back to Cloudflare AI:', backendError);
+        // Continue to Cloudflare AI fallback below
+      }
+    }
+    
+    // Fallback: Convert image to base64 for Cloudflare AI
     let base64Image = '';
     
     if (image_urls && image_urls.length > 0) {
@@ -272,7 +441,7 @@ async function handleScan(body: any, env?: Env): Promise<Response> {
     } else {
       console.log('WARNING: No image_urls provided or empty array');
     }
-
+    
     if (!base64Image) {
       console.log('ERROR: No base64Image generated - returning error');
       return new Response(JSON.stringify({ error: 'No image provided - image_urls was empty or image fetch failed' }), {

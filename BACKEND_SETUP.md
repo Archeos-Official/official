@@ -4,7 +4,7 @@ This document explains how to set up your own backend server to handle AI reques
 
 ## Overview
 
-The `workers/analyze-artifact/index.ts` worker can now send HTTP requests to your own backend server instead of using Cloudflare AI binding. This allows you to use local models (like Ollama) or any custom AI backend.
+The `workers/analyze-artifact/index.ts` worker now sends HTTP requests with **image URLs and metadata** to your backend server instead of using Cloudflare AI binding. This allows you to use local models (like Ollama) or any custom AI backend.
 
 ## Configuration
 
@@ -12,30 +12,51 @@ Set these environment variables in `workers/analyze-artifact/wrangler.toml`:
 
 ```toml
 [vars]
-BACKEND_URL = "http://localhost:11434"  # Your backend URL
-BACKEND_TYPE = "ollama"  # or "custom"
+BACKEND_URL = "http://localhost:3000"
+BACKEND_TYPE = "custom"  # or "ollama"
 ```
 
 Or set them via Cloudflare dashboard secrets for production.
 
 ## Request Format
 
-The worker sends POST requests to: `{BACKEND_URL}/api/chat`
+The worker sends POST requests to: `{BACKEND_URL}/api/analyze`
 
-### For Ollama Backend Type
+### Request Body (Custom Backend)
 
-**Request:**
+```json
+POST http://your-backend-url/api/analyze
+Content-Type: application/json
+
+{
+  "image_urls": [
+    "https://supabase-url/image1.jpg",
+    "https://supabase-url/image2.jpg"
+  ],
+  "metadata": {
+    "depth_found": "shallow",
+    "soil_type": "sandy",
+    "condition": "good",
+    "detection_method": "metal_detector",
+    "material": "bronze",
+    "latitude": 52.3676,
+    "longitude": 4.9041
+  }
+}
+```
+
+### Request Body (Ollama Backend Type)
+
 ```json
 POST http://your-backend-url/api/chat
 Content-Type: application/json
 
 {
   "model": "llama3.2-vision:11b",
-  "messages": [{
-    "role": "user",
-    "content": "Your prompt text here",
-    "images": ["base64-encoded-image-without-data-prefix"]
-  }],
+  "prompt": "You are an expert archaeologist...\n\nContext: Depth found: shallow, Soil type: sandy...\n\nAnalyze this artifact...",
+  "images": [
+    "https://supabase-url/image1.jpg"
+  ],
   "stream": false,
   "options": {
     "num_predict": 4096
@@ -43,91 +64,83 @@ Content-Type: application/json
 }
 ```
 
-**Expected Response:**
+## Expected Response Format
+
+Your backend should return one of these formats:
+
+### Format 1: Structured JSON (Recommended)
+
+```json
+{
+  "name": "Roman bronze fibula",
+  "period": "1st-3rd century AD",
+  "origin": "Roman Empire",
+  "material": "bronze",
+  "description": "A small bronze fibula with bow-shaped arch...",
+  "historical_context": "Fibulae were used as clothing fasteners...",
+  "similar_finds": "Similar finds in Roman Britain database...",
+  "confidence": 85,
+  "rarity": "uncommon"
+}
+```
+
+### Format 2: Text Response (Ollama-style)
+
 ```json
 {
   "message": {
-    "content": "The AI generated text response"
+    "content": "**Name:** Roman bronze fibula\n**Period:** 1st-3rd century AD\n..."
   }
 }
 ```
 
-Or alternative Ollama format:
-```json
-{
-  "response": "The AI generated text response"
-}
-```
-
-### For Custom Backend Type
-
-**Request:**
-```json
-POST http://your-backend-url/api/chat
-Content-Type: application/json
-
-{
-  "prompt": "Your prompt text here",
-  "image": "base64-encoded-image-without-data-prefix",
-  "max_tokens": 4096,
-  "stream": false
-}
-```
-
-**Expected Response:**
-```json
-{
-  "response": "The AI generated text response"
-}
-```
-
-Or alternative formats:
-```json
-{
-  "text": "The AI generated text response"
-}
-```
+### Format 3: Simple Text Response
 
 ```json
 {
-  "output": "The AI generated text response"
+  "response": "**Name:** Roman bronze fibula\n**Period:** 1st-3rd century AD\n..."
 }
 ```
+
+## Image Handling
+
+- Your backend receives **image URLs**, not base64
+- You need to fetch the images from the URLs (they're publicly accessible Supabase URLs)
+- Example: `fetch(image_urls[0])` to get the image data
 
 ## Example: Simple Express.js Backend
 
 ```javascript
 const express = require('express');
 const cors = require('cors');
+const fetch = require('node-fetch');
 const app = express();
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-// Ollama-style endpoint
-app.post('/api/chat', async (req, res) => {
+app.post('/api/analyze', async (req, res) => {
   try {
-    const { model, messages, prompt, image, options } = req.body;
+    const { image_urls, metadata } = req.body;
     
-    let userPrompt = prompt;
-    let base64Image = image;
+    console.log('Received image URLs:', image_urls);
+    console.log('Received metadata:', metadata);
     
-    // Handle Ollama format
-    if (messages && messages.length > 0) {
-      userPrompt = messages[0].content;
-      base64Image = messages[0].images ? messages[0].images[0] : null;
-    }
+    // Fetch images from URLs
+    const images = await Promise.all(
+      image_urls.map(async (url) => {
+        const response = await fetch(url);
+        const buffer = await response.buffer();
+        return buffer.toString('base64'); // Convert to base64 for your AI model
+      })
+    );
     
-    // TODO: Replace with your actual AI model call
-    // Example: call your local model, API, etc.
-    const response = await callYourAIModel(userPrompt, base64Image, options?.num_predict || 4096);
+    // TODO: Call your AI model with images and metadata
+    // Example: const result = await analyzeWithAI(images, metadata);
+    const result = await callYourAIModel(images, metadata);
     
-    // Return in Ollama format
-    res.json({
-      message: {
-        content: response
-      }
-    });
+    // Return structured JSON
+    res.json(result);
     
   } catch (error) {
     console.error('Error:', error);
@@ -135,13 +148,48 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-async function callYourAIModel(prompt, base64Image, maxTokens) {
+async function callYourAIModel(images, metadata) {
   // TODO: Implement your AI model call here
-  // Example with Ollama:
-  // const response = await fetch('http://localhost:11434/api/chat', {...});
-  // return response.message.content;
+  // Use images (base64) and metadata (context) to analyze
   
-  return "Your AI response here";
+  // Example with Ollama:
+  // const response = await fetch('http://localhost:11434/api/chat', {
+  //   method: 'POST',
+  //   body: JSON.stringify({
+  //     model: 'llama3.2-vision:11b',
+  //     messages: [{
+  //       role: 'user',
+  //       content: buildPrompt(metadata),
+  //       images: images
+  //     }],
+  //     stream: false
+  //   })
+  // });
+  // const data = await response.json();
+  // return parseResponse(data.message.content);
+  
+  return {
+    name: "Example artifact",
+    period: "Unknown",
+    origin: "Unknown",
+    material: metadata.material || "Unknown",
+    description: "Example description",
+    historical_context: "Example context",
+    similar_finds: "",
+    confidence: 50,
+    rarity: "common"
+  };
+}
+
+function buildPrompt(metadata) {
+  const parts = [];
+  if (metadata.depth_found) parts.push(`Depth found: ${metadata.depth_found}`);
+  if (metadata.soil_type) parts.push(`Soil type: ${metadata.soil_type}`);
+  if (metadata.latitude && metadata.longitude) {
+    parts.push(`Location: ${metadata.latitude}, ${metadata.longitude}`);
+  }
+  // ... add more context
+  return `Analyze this artifact. Context: ${parts.join(', ')}`;
 }
 
 const PORT = process.env.PORT || 3000;
@@ -152,7 +200,7 @@ app.listen(PORT, () => {
 
 ## Example: Using Ollama Directly
 
-If you're using Ollama, you can point directly to it:
+If you're using Ollama and want the worker to talk to it directly:
 
 ```toml
 [vars]
@@ -160,13 +208,21 @@ BACKEND_URL = "http://localhost:11434"
 BACKEND_TYPE = "ollama"
 ```
 
-The worker will automatically format requests for Ollama's API.
+The worker will automatically format requests for Ollama's API with image URLs.
 
-## Image Format
+## Metadata Fields
 
-- The worker strips the `data:image/jpeg;base64,` prefix before sending
-- Your backend receives clean base64-encoded image data
-- No data URI prefix - just the base64 string
+The `metadata` object includes:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `depth_found` | string | "surface", "shallow", "medium", "deep" |
+| `soil_type` | string | "sandy", "clay", "loam", "peat" |
+| `condition` | string | "excellent", "good", "fair", "poor", "fragmentary" |
+| `detection_method` | string | "metal_detector", "digging", "surface_find", etc. |
+| `material` | string | Known material (if user specified) |
+| `latitude` | number | Find location latitude |
+| `longitude` | number | Find location longitude |
 
 ## Testing
 
@@ -179,7 +235,9 @@ The worker will automatically format requests for Ollama's API.
 
 Check worker logs for:
 - `Calling backend at: ...` - confirms backend URL is set
+- `Image URLs: ...` - shows URLs being sent
+- `Metadata: ...` - shows metadata being sent
 - `Backend response length: ...` - confirms successful response
-- `Backend FAILED` - shows error details
 
 Check your backend logs for incoming requests.
+
