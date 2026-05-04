@@ -5,8 +5,10 @@ const corsHeaders = {
 };
 
 interface Env {
+  AI?: any;
   BACKEND_URL?: string;
   BACKEND_TYPE?: string;
+  USE_CLOUDFLARE_FALLBACK?: string; // 'true' or 'false'
 }
 
 const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
@@ -194,23 +196,54 @@ function parseTextResponse(text: string): any {
 async function callAI(prompt: string, image?: string, maxTokens: number = 4096, env?: Env): Promise<string> {
   console.log('callAI called, image:', !!image);
   console.log('BACKEND_URL:', env?.BACKEND_URL);
+  console.log('USE_CLOUDFLARE_FALLBACK:', env?.USE_CLOUDFLARE_FALLBACK);
   
-  // Send to custom backend - ONE request only
-  if (env?.BACKEND_URL) {
-    console.log('Using custom backend...');
+  const useCloudfareFallback = env?.USE_CLOUDFLARE_FALLBACK === 'true';
+  
+  // Try custom backend FIRST (if configured and not using Cloudfare fallback)
+  if (env?.BACKEND_URL && !useCloudfareFallback) {
+    console.log('Using custom backend first...');
     try {
-      // Build metadata from prompt (extract context)
       const metadata = extractMetadataFromPrompt(prompt);
       const imageUrls = image ? [image] : [];
       return await callAIBackend(imageUrls, metadata, env);
     } catch (e) {
-      console.error('Backend FAILED:', e);
-      throw e; // Don't fall back - just fail clearly
+      console.error('Custom backend FAILED:', e);
+      // If Cloudflare fallback is enabled, try it
+      if (useCloudfareFallback && env?.AI) {
+        console.log('Falling back to Cloudflare AI...');
+      } else {
+        throw e; // No fallback, re-throw
+      }
     }
   }
   
-  // No backend configured
-  return 'No AI backend configured. Please set BACKEND_URL in wrangler.toml';
+  // Use Cloudflare AI (either as primary or fallback)
+  if (env?.AI) {
+    console.log('Using Cloudflare AI...');
+    try {
+      console.log('Calling AI model:', VISION_MODEL);
+      const result: any = await env.AI.run(VISION_MODEL, {
+        prompt: prompt,
+        image: image,
+        max_tokens: maxTokens
+      });
+      
+      let responseText = result?.response || '';
+      if (!responseText && typeof result === 'string') {
+        responseText = result;
+      }
+      if (!responseText) {
+        responseText = JSON.stringify(result);
+      }
+      return responseText;
+    } catch (e) {
+      console.error('Cloudflare AI FAILED:', e);
+      throw e;
+    }
+  }
+  
+  throw new Error('No AI backend configured. Set BACKEND_URL or deploy with AI binding.');
 }
 
 function extractMetadataFromPrompt(prompt: string): any {

@@ -64,11 +64,11 @@ export default function Admin() {
                     </h1>
                     <div className="mt-4 flex items-center gap-4">
                         <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-[#8f7a6a]'}`}>
-                            AI Backend: {useCloudfareFallback ? 'Cloudflare AI' : 'Custom Backend'}
+                            AI Backend: <strong>{useCloudfareFallback ? 'Cloudflare AI' : 'Custom Backend'}</strong>
                         </span>
                         <Button
                             onClick={() => setUseCloudfareFallback(!useCloudfareFallback)}
-                            className={`rounded-xl ${useCloudfareFallback ? 'bg-orange-500 hover:bg-orange-600' : 'bg-[#b66c34] hover:bg-[#8f5428]'}`}
+                            className={`rounded-xl ${useCloudfareFallback ? 'bg-[#b66c34] hover:bg-[#8f5428]' : 'bg-blue-500 hover:bg-blue-600'} text-white`}
                         >
                             <Cloud className="w-4 h-4 mr-2" />
                             {useCloudfareFallback ? 'Switch to Custom Backend' : 'Use Cloudflare AI Fallback'}
